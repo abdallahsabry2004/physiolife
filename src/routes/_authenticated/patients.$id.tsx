@@ -102,7 +102,7 @@ function PatientDetail() {
     },
   });
 
-  const [markType, setMarkType] = useState(MARK_TYPES[0]);
+  const [markType, setMarkType] = useState<string>("Pain");
 
   const addMark = useMutation({
     mutationFn: async (pos: { x: number; y: number }) => {
@@ -137,7 +137,10 @@ function PatientDetail() {
 
   const updateSession = useMutation({
     mutationFn: async ({ sid, patch }: { sid: string; patch: Record<string, unknown> }) => {
-      const { error } = await supabase.from("treatment_sessions").update(patch).eq("id", sid);
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update(patch as never)
+        .eq("id", sid);
       if (error) throw error;
     },
     onSuccess: () => {
