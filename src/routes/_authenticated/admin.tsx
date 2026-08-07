@@ -5,6 +5,7 @@ import { HardDrive, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -226,5 +227,124 @@ function AdminPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const MODULES = ["history", "examination", "diagnosis", "plan"] as const;
+
+function ClinicalFieldCatalog() {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const [module, setModule] = useState<string>("history");
+  const [label, setLabel] = useState("");
+  const [labelAr, setLabelAr] = useState("");
+
+  const { data: fields = [] } = useQuery({
+    queryKey: ["clinical_fields_admin"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinical_fields")
+        .select("id, module, label, label_ar, sort_order")
+        .order("module")
+        .order("sort_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("clinical_fields").insert({
+        module,
+        label: label.trim(),
+        label_ar: labelAr.trim() || null,
+        field_type: "text",
+        is_suggestion: true,
+        sort_order: 999,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setLabel("");
+      setLabelAr("");
+      toast.success("Suggestion added");
+      void qc.invalidateQueries({ queryKey: ["clinical_fields_admin"] });
+      void qc.invalidateQueries({ queryKey: ["clinical_fields"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clinical_fields").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["clinical_fields_admin"] });
+      void qc.invalidateQueries({ queryKey: ["clinical_fields"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("cf.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">{t("cf.subtitle")}</p>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label>{t("cf.module")}</Label>
+            <Select value={module} onValueChange={setModule}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODULES.map((m) => (
+                  <SelectItem key={m} value={m} className="capitalize">
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cf-label">{t("cf.label")}</Label>
+            <Input id="cf-label" value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cf-label-ar">{t("cf.labelAr")}</Label>
+            <Input
+              id="cf-label-ar"
+              value={labelAr}
+              maxLength={120}
+              onChange={(e) => setLabelAr(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end">
+            <Button className="w-full" disabled={!label.trim() || add.isPending} onClick={() => add.mutate()}>
+              <Plus className="mr-2 h-4 w-4" /> {t("cf.add")}
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {fields.map((f) => (
+            <div key={f.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
+              <span>
+                <Badge variant="secondary" className="me-2 capitalize">
+                  {f.module}
+                </Badge>
+                {f.label}
+                {f.label_ar ? <span className="text-muted-foreground"> · {f.label_ar}</span> : null}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => remove.mutate(f.id)}>
+                {t("cf.delete")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
