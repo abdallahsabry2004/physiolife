@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { ClinicalModule } from "@/components/ClinicalModule";
+import { PatientFiles } from "@/components/PatientFiles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,19 +73,6 @@ function PatientDetail() {
         .select("*")
         .eq("patient_id", id)
         .order("session_number", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: files = [] } = useQuery({
-    queryKey: ["files", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("patient_files")
-        .select("id, file_name, category, drive_web_view_link, created_at")
-        .eq("patient_id", id)
-        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
