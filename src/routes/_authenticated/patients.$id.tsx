@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { ClinicalModule } from "@/components/ClinicalModule";
+import { PatientFiles } from "@/components/PatientFiles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,19 +73,6 @@ function PatientDetail() {
         .select("*")
         .eq("patient_id", id)
         .order("session_number", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: files = [] } = useQuery({
-    queryKey: ["files", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("patient_files")
-        .select("id, file_name, category, drive_web_view_link, created_at")
-        .eq("patient_id", id)
-        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -389,27 +377,10 @@ function PatientDetail() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="files" className="mt-6 space-y-3">
-          <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">
-              Imaging and documents (X-ray, MRI, CT, ultrasound, EMG, labs, reports, photos, videos)
-              are stored in the clinic Google Drive and stay linked to this record. Drive upload is
-              wired up in the next step once the clinic account is authorised.
-            </CardContent>
-          </Card>
-          {files.map((f) => (
-            <a
-              key={f.id}
-              href={f.drive_web_view_link ?? "#"}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm hover:border-primary"
-            >
-              <span>{f.file_name}</span>
-              <Badge variant="secondary">{f.category}</Badge>
-            </a>
-          ))}
+        <TabsContent value="files" className="mt-6">
+          <PatientFiles patientId={id} />
         </TabsContent>
+
       </Tabs>
     </div>
   );
