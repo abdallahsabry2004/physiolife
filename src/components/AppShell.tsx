@@ -1,5 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -9,42 +10,63 @@ import {
   LogOut,
   Menu,
   X,
+  Bell,
+  BarChart3,
+  Languages,
 } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
 import { useAuth } from "@/lib/auth";
+import { useI18n, type TKey } from "@/lib/i18n";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/patients", label: "Patients", icon: Users },
-  { to: "/exercises", label: "Exercise Library", icon: Dumbbell },
-  { to: "/billing", label: "Billing", icon: Receipt },
-  { to: "/admin", label: "Administration", icon: ShieldCheck, adminOnly: true },
-] as const;
+  { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/patients", label: "nav.patients", icon: Users },
+  { to: "/exercises", label: "nav.exercises", icon: Dumbbell },
+  { to: "/billing", label: "nav.billing", icon: Receipt },
+  { to: "/notifications", label: "nav.notifications", icon: Bell },
+  { to: "/analytics", label: "nav.analytics", icon: BarChart3 },
+  { to: "/admin", label: "nav.admin", icon: ShieldCheck, adminOnly: true },
+] as const satisfies readonly { to: string; label: TKey; icon: unknown; adminOnly?: boolean }[];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { fullName, roles, isAdmin, signOut } = useAuth();
+  const { t, lang, setLang } = useI18n();
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
   const items = nav.filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin);
 
+  const { data: unread = 0 } = useQuery({
+    queryKey: ["notifications-unread"],
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("is_read", false);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
   return (
     <div className="flex min-h-screen bg-background">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0 lg:translate-x-0",
+          open ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
         )}
       >
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
           <img src={logo} alt="Physio Life" width={40} height={40} className="h-10 w-10" />
           <div>
-            <p className="text-sm font-bold leading-tight">Physio Life</p>
-            <p className="text-xs text-sidebar-foreground/60">PT Center EMR</p>
+            <p className="text-sm font-bold leading-tight">{t("app.name")}</p>
+            <p className="text-xs text-sidebar-foreground/60">{t("app.tagline")}</p>
           </div>
-          <button className="ml-auto lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
+          <button className="ms-auto lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -65,37 +87,60 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               >
                 <item.icon className="h-4.5 w-4.5" />
-                {item.label}
+                {t(item.label)}
+                {item.to === "/notifications" && unread > 0 && (
+                  <span className="ms-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                    {unread}
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
 
         <div className="border-t border-sidebar-border p-4">
-          <p className="truncate text-sm font-medium">{fullName || "Staff member"}</p>
+          <p className="truncate text-sm font-medium">{fullName || t("shell.staff")}</p>
           <p className="mb-3 text-xs capitalize text-sidebar-foreground/60">
-            {roles.map((r) => r.replace("_", " ")).join(", ") || "no role assigned"}
+            {roles.map((r) => r.replace("_", " ")).join(", ") || t("shell.noRole")}
           </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-full"
-            onClick={() => {
-              void signOut();
-            }}
-          >
-            <LogOut className="mr-2 h-4 w-4" /> Sign out
-          </Button>
+          <div className="space-y-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-sidebar-foreground/80 hover:text-sidebar-accent-foreground"
+              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+            >
+              <Languages className="me-2 h-4 w-4" /> {t("shell.language")}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                void signOut();
+              }}
+            >
+              <LogOut className="me-2 h-4 w-4" /> {t("shell.signOut")}
+            </Button>
+          </div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
+      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64">
         <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
           <button onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
           <img src={logo} alt="" width={28} height={28} className="h-7 w-7" />
-          <span className="font-semibold">Physio Life</span>
+          <span className="font-semibold">{t("app.name")}</span>
+          <Link to="/notifications" className="ms-auto relative" aria-label={t("nav.notifications")}>
+            <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute -end-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                {unread}
+              </span>
+            )}
+          </Link>
         </header>
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
