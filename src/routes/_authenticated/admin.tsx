@@ -204,7 +204,10 @@ function AdminPage() {
         </CardContent>
       </Card>
 
+      <ClinicalFieldCatalog />
+
       <Card>
+
         <CardHeader>
           <CardTitle className="text-base">Audit log</CardTitle>
         </CardHeader>
