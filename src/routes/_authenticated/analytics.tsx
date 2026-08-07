@@ -134,7 +134,7 @@ function AnalyticsPage() {
               empty
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data?.sessionsByMonth}>
+                <LineChart data={data?.sessionsByMonth ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="month" fontSize={11} />
                   <YAxis fontSize={11} allowDecimals={false} />
@@ -155,7 +155,7 @@ function AnalyticsPage() {
               empty
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.revenueByMonth}>
+                <BarChart data={data?.revenueByMonth ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="month" fontSize={11} />
                   <YAxis fontSize={11} />
@@ -176,7 +176,7 @@ function AnalyticsPage() {
               empty
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.patientsByMonth}>
+                <BarChart data={data?.patientsByMonth ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="month" fontSize={11} />
                   <YAxis fontSize={11} allowDecimals={false} />
@@ -198,7 +198,7 @@ function AnalyticsPage() {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data?.attendance} dataKey="value" nameKey="name" outerRadius={80} label>
+                  <Pie data={data?.attendance ?? []} dataKey="value" nameKey="name" outerRadius={80} label>
                     {(data?.attendance ?? []).map((entry, i) => (
                       <Cell key={entry.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
@@ -219,7 +219,7 @@ function AnalyticsPage() {
               empty
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.perTherapist} layout="vertical">
+                <BarChart data={data?.perTherapist ?? []} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis type="number" fontSize={11} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" width={120} fontSize={11} />
