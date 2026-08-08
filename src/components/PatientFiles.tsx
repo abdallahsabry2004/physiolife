@@ -69,9 +69,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
-        if (file.size > 20 * 1024 * 1024) {
-          throw new Error(`${file.name} is larger than 20 MB.`);
-        }
+        // تم إزالة شرط حجم الملف (20MB) من هنا
         const content = await toBase64(file);
         await upload({
           data: {
@@ -161,7 +159,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             </div>
             <p className="text-xs text-muted-foreground">
               Files upload automatically to the clinic Google Drive, filed under this patient and
-              file type, and stay linked to the record. Max 20 MB per file.
+              file type, and stay linked to the record.
             </p>
           </CardContent>
         </Card>
