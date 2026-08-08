@@ -182,8 +182,11 @@ function PatientDetail() {
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="body">Body chart</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
+          <TabsTrigger value="measures">Measurements</TabsTrigger>
+          <TabsTrigger value="program">Home program</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="history" className="mt-6">
           <ClinicalModule
