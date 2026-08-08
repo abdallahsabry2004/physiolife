@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react"; // تم إضافة Trash2 هنا
 import { toast } from "sonner";
+import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import {
   Line,
   LineChart,
@@ -335,55 +336,8 @@ function PatientDetail() {
         </TabsContent>
 
         <TabsContent value="body" className="mt-6 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {MARK_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setMarkType(t)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  markType === t
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <div
-            className="relative mx-auto h-[520px] w-full max-w-sm rounded-2xl border bg-secondary/40"
-            onClick={(e) => {
-              if (!canEditClinical) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              addMark.mutate({
-                x: ((e.clientX - rect.left) / rect.width) * 100,
-                y: ((e.clientY - rect.top) / rect.height) * 100,
-              });
-            }}
-          >
-            <svg viewBox="0 0 100 200" className="h-full w-full text-muted-foreground/40">
-              <circle cx="50" cy="18" r="12" fill="currentColor" />
-              <rect x="34" y="32" width="32" height="60" rx="12" fill="currentColor" />
-              <rect x="18" y="34" width="12" height="60" rx="6" fill="currentColor" />
-              <rect x="70" y="34" width="12" height="60" rx="6" fill="currentColor" />
-              <rect x="36" y="92" width="12" height="80" rx="6" fill="currentColor" />
-              <rect x="52" y="92" width="12" height="80" rx="6" fill="currentColor" />
-            </svg>
-            {marks.map((m) => (
-              <span
-                key={m.id}
-                title={m.mark_type}
-                style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow"
-              >
-                {m.mark_type}
-              </span>
-            ))}
-          </div>
-          <p className="text-center text-xs text-muted-foreground">
-            Pick a marker type, then tap the body chart to place it.
-          </p>
-        </TabsContent>
+  <ProfessionalBodyChart patientId={id} />
+</TabsContent>
 
         <TabsContent value="progress" className="mt-6">
           <Card>
