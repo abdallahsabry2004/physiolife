@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react"; // تم إضافة Trash2 هنا
 import { toast } from "sonner";
 import {
   Line,
@@ -140,6 +140,19 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // تم إضافة دالة حذف الجلسة هنا
+  const deleteSession = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { error } = await supabase.from("treatment_sessions").delete().eq("id", sessionId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Session deleted successfully");
+      void qc.invalidateQueries({ queryKey: ["sessions", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const painSeries = [...sessions]
     .reverse()
     .filter((s) => s.pain_before !== null || s.pain_after !== null)
@@ -223,10 +236,25 @@ function PatientDetail() {
           )}
           {sessions.map((s) => (
             <Card key={s.id}>
-              <CardHeader>
+              {/* تعديل الـ Header لإضافة زرار المسح */}
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-base">
                   Session #{s.session_number} · {s.session_date}
                 </CardTitle>
+                {canEditClinical && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
+                        deleteSession.mutate(s.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -393,7 +421,6 @@ function PatientDetail() {
         <TabsContent value="files" className="mt-6">
           <PatientFiles patientId={id} />
         </TabsContent>
-
 
       </Tabs>
     </div>
