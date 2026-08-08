@@ -5,11 +5,13 @@ import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { deletePatientFile, uploadPatientFile } from "@/lib/drive.functions";
+// استدعاء دوال الرفع المباشر اللي جهزناها في الباك إند
+import { deletePatientFile, getDriveUploadToken, saveFileRecord } from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress"; // استدعاء شريط التحميل
 import {
   Select,
   SelectContent,
@@ -32,17 +34,14 @@ const CATEGORIES = [
   "Other",
 ];
 
-function toBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result);
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(new Error("Could not read the file"));
-    reader.readAsDataURL(file);
-  });
-}
+// دالة مساعدة لتحويل الـ Bytes لـ KB و MB بشكل مقروء
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
 
 export function PatientFiles({ patientId }: { patientId: string }) {
   const { canEditClinical } = useAuth();
@@ -50,7 +49,17 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("X-ray");
 
-  const upload = useServerFn(uploadPatientFile);
+  // State الخاص بتتبع حالة الرفع وسرعته
+  const [uploadStats, setUploadStats] = useState<{
+    progress: number;
+    uploadedBytes: number;
+    totalBytes: number;
+    speed: string;
+    fileName: string;
+  } | null>(null);
+
+  const getToken = useServerFn(getDriveUploadToken);
+  const saveRecord = useServerFn(saveFileRecord);
   const removeFile = useServerFn(deletePatientFile);
 
   const { data: files = [] } = useQuery({
@@ -69,24 +78,103 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
-        // تم إزالة شرط حجم الملف (20MB) من هنا
-        const content = await toBase64(file);
-        await upload({
+        // 1. طلب تصريح الرفع من السيرفر بتاعنا (Direct Upload Token)
+        const { accessToken, folderId, storageAccountId } = await getToken({
+          data: { patientId, category },
+        });
+
+        if (!accessToken) throw new Error("Failed to get upload authorization.");
+
+        // 2. تجهيز بيانات الملف للرفع المباشر
+        const metadata = {
+          name: file.name,
+          parents: [folderId],
+        };
+
+        const formData = new FormData();
+        formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+        formData.append("file", file);
+
+        // 3. رفع الملف باستخدام XMLHttpRequest عشان نقدر نتتبع الـ Progress
+        const driveData = await new Promise<any>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open(
+            "POST",
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,size"
+          );
+          xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+
+          let lastTime = Date.now();
+          let lastLoaded = 0;
+          let currentSpeed = "0 KB/s";
+
+          // تتبع التقدم
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const now = Date.now();
+              const timeDiff = (now - lastTime) / 1000; // فرق الوقت بالثواني
+
+              // تحديث السرعة كل نص ثانية عشان الشاشة مترعش
+              if (timeDiff > 0.5) {
+                const speedBps = (event.loaded - lastLoaded) / timeDiff;
+                if (speedBps > 1024 * 1024) {
+                  currentSpeed = `${(speedBps / (1024 * 1024)).toFixed(2)} MB/s`;
+                } else {
+                  currentSpeed = `${(speedBps / 1024).toFixed(2)} KB/s`;
+                }
+                lastTime = now;
+                lastLoaded = event.loaded;
+              }
+
+              setUploadStats({
+                progress: Math.round((event.loaded / event.total) * 100),
+                uploadedBytes: event.loaded,
+                totalBytes: event.total,
+                speed: currentSpeed,
+                fileName: file.name,
+              });
+            }
+          };
+
+          // استلام النتيجة
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error(`Upload to Google Drive failed: ${xhr.statusText}`));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error("Network error during upload."));
+
+          // بدء الرفع
+          xhr.send(formData);
+        });
+
+        // 4. حفظ بيانات الملف في قاعدة البيانات بعد نجاح الرفع
+        await saveRecord({
           data: {
             patientId,
             category,
             fileName: file.name,
             mimeType: file.type || "application/octet-stream",
-            content,
+            size: Number(driveData.size || file.size),
+            driveFileId: driveData.id,
+            webViewLink: driveData.webViewLink,
+            storageAccountId: storageAccountId,
           },
         });
       }
     },
     onSuccess: () => {
-      toast.success("Uploaded to the clinic Google Drive");
+      toast.success("Files uploaded successfully!");
+      setUploadStats(null); // إعادة تعيين شريط التحميل بعد النجاح
       void qc.invalidateQueries({ queryKey: ["files", patientId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.error(e.message);
+      setUploadStats(null);
+    },
     onSettled: () => {
       if (inputRef.current) inputRef.current.value = "";
     },
@@ -157,9 +245,26 @@ export function PatientFiles({ patientId }: { patientId: string }) {
                 </div>
               </div>
             </div>
+
+            {/* شريط التحميل يظهر أثناء الرفع فقط */}
+            {uploadMutation.isPending && uploadStats && (
+              <div className="space-y-2 mt-4 rounded-lg border bg-secondary/30 p-4">
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="truncate max-w-[70%]">Uploading {uploadStats.fileName}...</span>
+                  <span>{uploadStats.progress}%</span>
+                </div>
+                <Progress value={uploadStats.progress} className="h-2 w-full" />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>
+                    {formatBytes(uploadStats.uploadedBytes)} / {formatBytes(uploadStats.totalBytes)}
+                  </span>
+                  <span>Speed: {uploadStats.speed}</span>
+                </div>
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">
-              Files upload automatically to the clinic Google Drive, filed under this patient and
-              file type, and stay linked to the record.
+              Files upload automatically and directly to the clinic Google Drive without size limits.
             </p>
           </CardContent>
         </Card>
@@ -178,7 +283,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             <p className="truncate font-medium">{f.file_name}</p>
             <p className="text-xs text-muted-foreground">
               {new Date(f.created_at).toLocaleDateString()}
-              {f.size_bytes ? ` · ${Math.max(1, Math.round(f.size_bytes / 1024))} KB` : ""}
+              {f.size_bytes ? ` · ${formatBytes(f.size_bytes)}` : ""}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
