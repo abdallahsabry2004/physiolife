@@ -1,3 +1,4 @@
+// src/components/PatientFiles.tsx
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -5,7 +6,7 @@ import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { deletePatientFile, getDriveUploadToken, saveFileRecord } from "@/lib/drive.functions";
+import { deletePatientFile, initiateDriveUpload, saveFileRecord } from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +56,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
     fileName: string;
   } | null>(null);
 
-  const getToken = useServerFn(getDriveUploadToken);
+  const initUpload = useServerFn(initiateDriveUpload);
   const saveRecord = useServerFn(saveFileRecord);
   const removeFile = useServerFn(deletePatientFile);
 
@@ -75,42 +76,22 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
-        // 1. طلب تصريح الرفع ومعرف الفولدر من السيرفر
-        const { accessToken, folderId, storageAccountId } = await getToken({
-          data: { patientId, category },
+        // 1. السيرفر بيكلم جوجل ويجيب الرابط المؤقت للرفع المباشر
+        const { uploadUrl, storageAccountId } = await initUpload({
+          data: { 
+            patientId, 
+            category,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream"
+          },
         });
 
-        if (!accessToken) throw new Error("Failed to get upload authorization.");
+        if (!uploadUrl) throw new Error("Failed to get upload URL from server.");
 
-        // 2. بدء الرفع المتقطع (Resumable Upload)
-        const initRes = await fetch(
-          "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,size",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              "X-Upload-Content-Type": file.type || "application/octet-stream",
-              "X-Upload-Content-Length": file.size.toString(),
-            },
-            body: JSON.stringify({
-              name: file.name,
-              parents: [folderId],
-            }),
-          }
-        );
-
-        if (!initRes.ok) throw new Error("Failed to initialize Google Drive upload.");
-
-        // استخراج رابط الرفع المباشر من جوجل
-        const uploadUrl = initRes.headers.get("Location");
-        if (!uploadUrl) throw new Error("Google didn't return an upload URL.");
-
-        // 3. رفع الملف الفعلي باستخدام XMLHttpRequest لتتبع التقدم
+        // 2. المتصفح بيرفع الملف الخام للرابط مباشرة باستخدام XMLHttpRequest لتتبع التقدم
         const driveData = await new Promise<any>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open("PUT", uploadUrl);
-          // لا نحتاج لوضع Authorization هنا لأن رابط الرفع يحتوي على التصريح
+          xhr.open("PUT", uploadUrl); // يتم الرفع بطريقة الـ PUT
 
           let lastTime = Date.now();
           let lastLoaded = 0;
@@ -152,11 +133,11 @@ export function PatientFiles({ patientId }: { patientId: string }) {
 
           xhr.onerror = () => reject(new Error("Network error during upload."));
 
-          // إرسال الملف الخام مباشرة بدون FormData
+          // يتم إرسال الملف مباشرة
           xhr.send(file);
         });
 
-        // 4. حفظ بيانات الملف في قاعدة بيانات Supabase
+        // 3. حفظ بيانات الملف في قاعدة البيانات
         await saveRecord({
           data: {
             patientId,
