@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -20,12 +20,6 @@ export const Route = createFileRoute("/")({
         content:
           "Secure staff sign-in for the Physio Life physical therapy center electronic medical record and clinic management system.",
       },
-      { property: "og:title", content: "Physio Life EMR — Clinic Sign In" },
-      {
-        property: "og:description",
-        content:
-          "Electronic medical records, treatment sessions, exercise programs and billing for Physio Life PT center.",
-      },
     ],
   }),
   component: LoginPage,
@@ -33,8 +27,8 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  // ضفنا حالة verify ومسحنا forgot لأننا هننقله لصفحة منفصلة
-  const [mode, setMode] = useState<"signin" | "signup" | "verify">("signin");
+  // إضافة forgot و reset لحالات الصفحة
+  const [mode, setMode] = useState<"signin" | "signup" | "verify" | "forgot" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -61,13 +55,11 @@ function LoginPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: { full_name: fullName },
-          },
+          options: { data: { full_name: fullName } },
         });
         if (error) throw error;
         toast.success("A 6-digit code has been sent to your email.");
-        setMode("verify"); // النقل لخطوة إدخال الـ OTP
+        setMode("verify");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -76,7 +68,6 @@ function LoginPage() {
     }
   };
 
-  // دالة مخصصة لتأكيد الـ OTP للحساب الجديد
   const verifySignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length < 6) return toast.error("Please enter the complete 6-digit OTP.");
@@ -88,7 +79,6 @@ function LoginPage() {
         token: otp,
         type: "signup",
       });
-      
       if (error) throw error;
 
       toast.success("Account verified successfully! You are now signed in.");
@@ -99,6 +89,59 @@ function LoginPage() {
       setBusy(false);
     }
   };
+
+  // دالة طلب كود تغيير كلمة المرور
+  const requestReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("A 6-digit code has been sent to your email.");
+    setMode("reset");
+  };
+
+  // دالة تأكيد كود كلمة المرور وتحديثها
+  const verifyAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length < 6) return toast.error("Please enter the complete 6-digit OTP.");
+    if (password.length < 6) return toast.error("Password must be at least 6 characters.");
+    
+    setBusy(true);
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: "recovery",
+    });
+
+    if (verifyError) {
+      setBusy(false);
+      return toast.error(verifyError.message);
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+
+    if (updateError) {
+      return toast.error(updateError.message);
+    }
+
+    toast.success("Password updated successfully! You can now sign in.");
+    setOtp("");
+    setPassword("");
+    setMode("signin");
+  };
+
+  // تحديد العنوان والوصف بناءً على الـ Mode
+  let title = "Staff sign in";
+  let desc = "Access is restricted to clinic staff.";
+  if (mode === "signup") { title = "Create account"; desc = "Register a new staff account."; }
+  if (mode === "verify") { title = "Verify Account"; desc = "Enter the 6-digit code sent to your email to activate your account."; }
+  if (mode === "forgot") { title = "Reset Password"; desc = "Enter your email address to receive a 6-digit code."; }
+  if (mode === "reset") { title = "Set New Password"; desc = "Enter the 6-digit code and your new password."; }
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
@@ -129,15 +172,8 @@ function LoginPage() {
               <span className="font-bold">Physio Life</span>
             </div>
             
-            <h2 className="text-2xl font-semibold mb-2">
-              {mode === "signin" ? "Staff sign in" : mode === "signup" ? "Create account" : "Verify Account"}
-            </h2>
-            
-            <p className="text-sm text-muted-foreground mb-6">
-              {mode === "verify"
-                ? "Enter the 6-digit code sent to your email to activate your account."
-                : "Access is restricted to clinic staff."}
-            </p>
+            <h2 className="text-2xl font-semibold mb-2">{title}</h2>
+            <p className="text-sm text-muted-foreground mb-6">{desc}</p>
 
             {mode === "verify" ? (
               <form onSubmit={verifySignup} className="space-y-6">
@@ -158,11 +194,54 @@ function LoginPage() {
                   {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Verify & Sign In
                 </Button>
-                <div className="mt-4 text-center text-sm text-muted-foreground">
-                  <button type="button" className="hover:underline" onClick={() => setMode("signup")}>
-                    Back to sign up
-                  </button>
+              </form>
+            ) : mode === "forgot" ? (
+              <form onSubmit={requestReset} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Send Code
+                </Button>
+              </form>
+            ) : mode === "reset" ? (
+              <form onSubmit={verifyAndReset} className="space-y-6">
+                <div className="space-y-2 flex flex-col items-center">
+                  <Label htmlFor="otp" className="w-full text-left">OTP Code</Label>
+                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-pw">New Password</Label>
+                  <Input
+                    id="new-pw"
+                    type="password"
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Verify & Update Password
+                </Button>
               </form>
             ) : (
               <form onSubmit={submit} className="space-y-4">
@@ -205,12 +284,13 @@ function LoginPage() {
                       />
                       Remember me
                     </label>
-                    <Link
-                      to="/reset-password"
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setOtp(""); setPassword(""); }}
                       className="text-sm font-medium text-primary hover:underline"
                     >
                       Forgot password?
-                    </Link>
+                    </button>
                   </div>
                 )}
                 
@@ -221,19 +301,17 @@ function LoginPage() {
               </form>
             )}
 
-            {mode !== "verify" && (
-              <div className="mt-6 text-center text-sm text-muted-foreground">
-                {mode === "signin" ? (
-                  <button className="hover:underline" onClick={() => setMode("signup")}>
-                    First staff account? Create it here
-                  </button>
-                ) : (
-                  <button className="hover:underline" onClick={() => setMode("signin")}>
-                    Back to sign in
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              {mode === "signin" ? (
+                <button className="hover:underline" onClick={() => setMode("signup")}>
+                  First staff account? Create it here
+                </button>
+              ) : (
+                <button className="hover:underline" onClick={() => { setMode("signin"); setOtp(""); setPassword(""); }}>
+                  Back to sign in
+                </button>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
