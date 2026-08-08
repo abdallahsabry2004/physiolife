@@ -75,9 +75,7 @@ export const uploadPatientFile = createServerFn({ method: "POST" })
     if (!data?.patientId || !data.fileName || !data.content) {
       throw new Error("Missing file data");
     }
-    if (data.content.length > 30_000_000) {
-      throw new Error("File is too large — please keep uploads under 20 MB.");
-    }
+    // تم إزالة شرط الـ 30_000_000 من هنا للسماح بأي مساحة
     return {
       patientId: data.patientId,
       category: data.category || "Other",
@@ -177,4 +175,20 @@ export const deletePatientFile = createServerFn({ method: "POST" })
     const { error: delError } = await supabase.from("patient_files").delete().eq("id", data.fileId);
     if (delError) throw new Error(delError.message);
     return { ok: true };
+  });
+
+// دالة جديدة لجلب مساحة التخزين من حساب جوجل درايف الأساسي المربوط
+export const getDriveQuota = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    // استدعاء بيانات المساحة من Google Drive API
+    const res = await driveFetch(`/drive/v3/about?fields=storageQuota`);
+    const data = (await res.json()) as { 
+      storageQuota?: { limit?: string; usage?: string; usageInDrive?: string } 
+    };
+    
+    return {
+      limit: Number(data.storageQuota?.limit || 0),
+      usage: Number(data.storageQuota?.usage || 0),
+    };
   });
