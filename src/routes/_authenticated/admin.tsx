@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress"; // تم إضافة Progress
+import { getDriveQuota } from "@/lib/drive.functions"; // تم إضافة جلب المساحة
 import {
   Select,
   SelectContent,
@@ -41,6 +43,21 @@ function AdminPage() {
   const { isAdmin } = useAuth();
   const qc = useQueryClient();
   const [driveEmail, setDriveEmail] = useState("");
+
+  // جلب مساحة التخزين للحساب الأساسي المربوط بالـ Gateway
+  const { data: driveQuota, isLoading: isQuotaLoading } = useQuery({
+    queryKey: ["drive_quota"],
+    queryFn: async () => {
+      const res = await getDriveQuota();
+      return res;
+    },
+  });
+
+  // دوال مساعدة لتحويل الـ Bytes إلى جيجابايت
+  const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(2);
+  const usagePercentage = driveQuota?.limit 
+    ? Math.min((driveQuota.usage / driveQuota.limit) * 100, 100) 
+    : 0;
 
   const { data: staff = [] } = useQuery({
     queryKey: ["staff"],
@@ -218,37 +235,59 @@ function AdminPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <HardDrive className="h-4 w-4" /> Google Drive storage accounts
+            <HardDrive className="h-4 w-4" /> Google Drive Storage
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Add an extra Google account to expand file storage capacity. New uploads move to the
-            next active account when the primary one fills up.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              className="max-w-sm"
-              placeholder="extra.storage@gmail.com"
-              value={driveEmail}
-              onChange={(e) => setDriveEmail(e.target.value)}
-            />
-            <Button onClick={() => addAccount.mutate()} disabled={!driveEmail}>
-              <Plus className="mr-2 h-4 w-4" /> Add account
-            </Button>
+        <CardContent className="space-y-6">
+          
+          {/* جزء عرض المساحة للحساب الأساسي المربوط */}
+          <div className="space-y-2 rounded-lg border bg-secondary/30 p-4">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm font-semibold">Primary Connected Account Quota</span>
+              {isQuotaLoading ? (
+                <span className="text-xs text-muted-foreground">Loading...</span>
+              ) : driveQuota?.limit ? (
+                <span className="text-xs font-medium">
+                  {formatGB(driveQuota.usage)} GB used of {formatGB(driveQuota.limit)} GB
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Unlimited / Unknown</span>
+              )}
+            </div>
+            <Progress value={usagePercentage} className="h-2 w-full" />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              This shows the actual storage limits of the Google Drive account currently authorized via the system API.
+            </p>
           </div>
-          <div className="space-y-2">
-            {accounts.map((a) => (
-              <div key={a.id} className="flex justify-between rounded-lg border p-3 text-sm">
-                <span>{a.email}</span>
-                <Badge variant={a.is_primary ? "default" : "secondary"}>
-                  {a.is_primary ? "primary" : a.is_active ? "active" : "inactive"}
-                </Badge>
-              </div>
-            ))}
-            {accounts.length === 0 && (
-              <p className="text-sm text-muted-foreground">No additional accounts yet.</p>
-            )}
+
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Add an extra Google account email for organizing folders. (Note: System still uses the primary authorized API key for uploads).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="max-w-sm"
+                placeholder="extra.storage@gmail.com"
+                value={driveEmail}
+                onChange={(e) => setDriveEmail(e.target.value)}
+              />
+              <Button onClick={() => addAccount.mutate()} disabled={!driveEmail}>
+                <Plus className="mr-2 h-4 w-4" /> Add account
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <div key={a.id} className="flex justify-between rounded-lg border p-3 text-sm">
+                  <span>{a.email}</span>
+                  <Badge variant={a.is_primary ? "default" : "secondary"}>
+                    {a.is_primary ? "primary" : a.is_active ? "active" : "inactive"}
+                  </Badge>
+                </div>
+              ))}
+              {accounts.length === 0 && (
+                <p className="text-sm text-muted-foreground">No additional accounts yet.</p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
