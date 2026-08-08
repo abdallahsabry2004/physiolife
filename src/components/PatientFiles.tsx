@@ -33,6 +33,7 @@ const CATEGORIES = [
   "Other",
 ];
 
+// دالة لتحويل المساحات إلى صيغة مقروءة
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
@@ -41,6 +42,7 @@ const formatBytes = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+// دالة مساعدة لتحويل القطعة (Chunk) إلى Base64 لإرسالها للسيرفر
 function toBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -59,6 +61,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("X-ray");
 
+  // State لتتبع حالة الرفع وسرعته
   const [uploadStats, setUploadStats] = useState<{
     progress: number;
     uploadedBytes: number;
@@ -67,6 +70,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
     fileName: string;
   } | null>(null);
 
+  // استدعاء دوال السيرفر اللي شغالة بشكل سليم ومستقر
   const initUpload = useServerFn(initiateDriveUpload);
   const sendChunk = useServerFn(uploadDriveChunk);
   const saveRecord = useServerFn(saveFileRecord);
@@ -87,12 +91,13 @@ export function PatientFiles({ patientId }: { patientId: string }) {
 
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
-      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB لكل قطعة لتخطي حدود Vercel
+      // السر السحري: استخدام 256 كيلوبايت (الحد الأدنى لجوجل) عشان الشريط يبقى Smooth جداً
+      const CHUNK_SIZE = 262144; 
 
       for (const file of fileList) {
         if (file.size === 0) throw new Error(`File ${file.name} is empty.`);
 
-        // 1. طلب الرابط المؤقت
+        // 1. طلب الرابط المؤقت من السيرفر
         const { uploadUrl, storageAccountId } = await initUpload({
           data: { 
             patientId, 
@@ -107,13 +112,15 @@ export function PatientFiles({ patientId }: { patientId: string }) {
         let start = 0;
         let driveData = null;
 
-        // 2. الرفع المجزأ للقطع
+        // 2. الرفع المجزأ (Micro-chunks) من خلال السيرفر
         while (start < file.size) {
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const chunk = file.slice(start, end);
           const base64 = await toBase64(chunk);
+          
           const startTime = Date.now();
 
+          // إرسال القطعة للسيرفر بتاعنا (اللي بدوره هيبعتها لجوجل)
           const chunkRes = await sendChunk({
             data: {
               uploadUrl,
@@ -124,7 +131,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             },
           });
 
-          // حساب السرعة وتحديث شريط التقدم
+          // حساب سرعة الرفع للقطعة
           const timeDiff = (Date.now() - startTime) / 1000;
           let currentSpeed = "0 KB/s";
           if (timeDiff > 0) {
@@ -136,6 +143,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             }
           }
 
+          // تحديث شريط التقدم (هيتحدث 4 مرات في الميجا الواحدة)
           setUploadStats({
             progress: Math.round((end / file.size) * 100),
             uploadedBytes: end,
@@ -144,13 +152,13 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             fileName: file.name,
           });
 
-          // لو الرفع اكتمل
+          // فحص هل جوجل رد بأن الملف اكتمل؟
           if (chunkRes.status === 200 || chunkRes.status === 201) {
             driveData = chunkRes.data;
             break;
           }
 
-          start = end;
+          start = end; // تحريك المؤشر للقطعة التانية
         }
 
         if (!driveData) throw new Error("Upload did not complete properly.");
@@ -250,6 +258,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
               </div>
             </div>
 
+            {/* شريط التحميل اللحظي والتفاعلي المستمر */}
             {uploadMutation.isPending && uploadStats && (
               <div className="space-y-2 mt-4 rounded-lg border bg-secondary/30 p-4">
                 <div className="flex justify-between text-xs font-medium">
