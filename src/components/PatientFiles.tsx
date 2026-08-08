@@ -5,13 +5,12 @@ import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-// استدعاء دوال الرفع المباشر اللي جهزناها في الباك إند
 import { deletePatientFile, getDriveUploadToken, saveFileRecord } from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress"; // استدعاء شريط التحميل
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -34,7 +33,6 @@ const CATEGORIES = [
   "Other",
 ];
 
-// دالة مساعدة لتحويل الـ Bytes لـ KB و MB بشكل مقروء
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
@@ -49,7 +47,6 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("X-ray");
 
-  // State الخاص بتتبع حالة الرفع وسرعته
   const [uploadStats, setUploadStats] = useState<{
     progress: number;
     uploadedBytes: number;
@@ -78,14 +75,12 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
-        // 1. طلب تصريح الرفع من السيرفر بتاعنا (Direct Upload Token)
         const { accessToken, folderId, storageAccountId } = await getToken({
           data: { patientId, category },
         });
 
         if (!accessToken) throw new Error("Failed to get upload authorization.");
 
-        // 2. تجهيز بيانات الملف للرفع المباشر
         const metadata = {
           name: file.name,
           parents: [folderId],
@@ -95,7 +90,6 @@ export function PatientFiles({ patientId }: { patientId: string }) {
         formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
         formData.append("file", file);
 
-        // 3. رفع الملف باستخدام XMLHttpRequest عشان نقدر نتتبع الـ Progress
         const driveData = await new Promise<any>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open(
@@ -108,13 +102,11 @@ export function PatientFiles({ patientId }: { patientId: string }) {
           let lastLoaded = 0;
           let currentSpeed = "0 KB/s";
 
-          // تتبع التقدم
           xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
               const now = Date.now();
-              const timeDiff = (now - lastTime) / 1000; // فرق الوقت بالثواني
+              const timeDiff = (now - lastTime) / 1000;
 
-              // تحديث السرعة كل نص ثانية عشان الشاشة مترعش
               if (timeDiff > 0.5) {
                 const speedBps = (event.loaded - lastLoaded) / timeDiff;
                 if (speedBps > 1024 * 1024) {
@@ -136,7 +128,6 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             }
           };
 
-          // استلام النتيجة
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
               resolve(JSON.parse(xhr.responseText));
@@ -147,11 +138,9 @@ export function PatientFiles({ patientId }: { patientId: string }) {
 
           xhr.onerror = () => reject(new Error("Network error during upload."));
 
-          // بدء الرفع
           xhr.send(formData);
         });
 
-        // 4. حفظ بيانات الملف في قاعدة البيانات بعد نجاح الرفع
         await saveRecord({
           data: {
             patientId,
@@ -167,8 +156,8 @@ export function PatientFiles({ patientId }: { patientId: string }) {
       }
     },
     onSuccess: () => {
-      toast.success("Files uploaded successfully!");
-      setUploadStats(null); // إعادة تعيين شريط التحميل بعد النجاح
+      toast.success("Files uploaded successfully");
+      setUploadStats(null);
       void qc.invalidateQueries({ queryKey: ["files", patientId] });
     },
     onError: (e: Error) => {
@@ -246,7 +235,6 @@ export function PatientFiles({ patientId }: { patientId: string }) {
               </div>
             </div>
 
-            {/* شريط التحميل يظهر أثناء الرفع فقط */}
             {uploadMutation.isPending && uploadStats && (
               <div className="space-y-2 mt-4 rounded-lg border bg-secondary/30 p-4">
                 <div className="flex justify-between text-xs font-medium">
