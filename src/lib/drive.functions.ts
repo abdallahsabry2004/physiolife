@@ -1,18 +1,32 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { JWT } from "google-auth-library";
+// استيراد النوع (Type) فقط عشان الـ Build ما يضربش في المتصفح
+import type { JWT } from "google-auth-library";
 
-// 1. إعداد مصادقة جوجل باستخدام الـ Service Account
-function getGoogleAuth() {
+// 1. إعداد مصادقة جوجل باستخدام الـ Service Account (بقت Async عشان نحمل المكتبة وقت اللزوم فقط)
+async function getGoogleAuth() {
+  // تحميل المكتبة في السيرفر فقط (Dynamic Import) لتفادي أخطاء البناء في واجهة المستخدم
+  const { JWT: GoogleJWT } = await import("google-auth-library");
+
   const email = process.env.GOOGLE_CLIENT_EMAIL;
-  // معالجة الـ Private Key عشان يتقرأ صح من الـ Environment Variables
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  let rawKey = process.env.GOOGLE_PRIVATE_KEY || "";
 
-  if (!email || !privateKey) {
+  if (!email || !rawKey) {
     throw new Error("Google Cloud credentials are missing.");
   }
 
-  return new JWT({
+  // تنظيف المفتاح من أي علامات تنصيص إضافية بتضيفها منصات الاستضافة
+  if (rawKey.startsWith('"') && rawKey.endsWith('"')) {
+    rawKey = rawKey.slice(1, -1);
+  }
+  if (rawKey.startsWith("'") && rawKey.endsWith("'")) {
+    rawKey = rawKey.slice(1, -1);
+  }
+
+  // تحويل الـ \n النصية إلى سطور فعلية عشان التشفير يشتغل
+  const privateKey = rawKey.replace(/\\n/g, '\n');
+
+  return new GoogleJWT({
     email,
     key: privateKey,
     scopes: ["https://www.googleapis.com/auth/drive.file"],
@@ -69,7 +83,7 @@ export const getDriveUploadToken = createServerFn({ method: "POST" })
       
     if (patientError || !patient) throw new Error("Patient not found.");
 
-    // جلب الحساب الأساسي (هنا بنجيب الـ Root Folder ID اللي الـ Admin حطه)
+    // جلب الحساب الأساسي 
     const { data: account } = await supabase
       .from("storage_accounts")
       .select("id, root_folder_id")
@@ -78,15 +92,13 @@ export const getDriveUploadToken = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const auth = getGoogleAuth();
+    const auth = await getGoogleAuth();
     const token = await auth.getAccessToken();
 
-    // التأكد من وجود فولدر المريض وفولدر التصنيف (X-ray, MRI, etc.)
     const rootId = account?.root_folder_id; 
     const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId);
     const categoryFolderId = await ensureFolder(auth, data.category, patientFolderId);
 
-    // إرجاع التوكن ومعرف الفولدر للمتصفح عشان يبدأ الرفع
     return {
       accessToken: token.token,
       folderId: categoryFolderId,
@@ -131,7 +143,7 @@ export const deletePatientFile = createServerFn({ method: "POST" })
 
     if (row.drive_file_id) {
       try {
-        const auth = getGoogleAuth();
+        const auth = await getGoogleAuth();
         const token = await auth.getAccessToken();
         await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
           method: "DELETE",
@@ -146,12 +158,12 @@ export const deletePatientFile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// 5. دالة جلب مساحة التخزين (Storage Quota) باستخدام الـ Service Account
+// 5. دالة جلب مساحة التخزين (Storage Quota)
 export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     try {
-      const auth = getGoogleAuth();
+      const auth = await getGoogleAuth();
       const token = await auth.getAccessToken();
 
       const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
