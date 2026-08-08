@@ -146,3 +146,52 @@
   }
 
 }
+
+/* إعدادات الطباعة الاحترافية للتقارير الطبية */
+@media print {
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
+  
+  body {
+    background-color: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* إخفاء القائمة الجانبية والشريط العلوي وأزرار التابات */
+  aside, nav, button, [role="tablist"], .print\:hidden {
+    display: none !important;
+  }
+
+  /* إظهار العناصر المخصصة للطباعة فقط */
+  .print\:block {
+    display: block !important;
+  }
+
+  /* تنظيف الكروت لتظهر كصفحة بيضاء احترافية */
+  .rounded-xl, .border, .shadow {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* تحويل خانات الإدخال لنصوص عادية في الطباعة */
+  textarea, input {
+    border: none !important;
+    background: transparent !important;
+    resize: none !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    box-shadow: none !important;
+    color: #111 !important;
+  }
+
+  [role="tabpanel"] {
+    margin-top: 0 !important;
+  }
+}
