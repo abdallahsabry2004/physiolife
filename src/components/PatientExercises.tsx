@@ -183,7 +183,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-6">
       {canEditClinical && (
-        <Card className={editingId ? "border-primary" : ""}>
+        <Card className={`print:hidden ${editingId ? "border-primary" : ""}`}>
           <CardHeader>
             <CardTitle className="text-base">
               {editingId ? "Edit prescribed exercise" : "Prescribe an exercise"}
