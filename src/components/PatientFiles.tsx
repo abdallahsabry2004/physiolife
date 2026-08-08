@@ -76,13 +76,14 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
-        // 1. السيرفر بيكلم جوجل ويجيب الرابط المؤقت للرفع المباشر
+        // 1. السيرفر بيكلم جوجل ويجيب الرابط المؤقت للرفع المباشر (مع إرسال مسار الموقع الحالي)
         const { uploadUrl, storageAccountId } = await initUpload({
           data: { 
             patientId, 
             category,
             fileName: file.name,
-            mimeType: file.type || "application/octet-stream"
+            mimeType: file.type || "application/octet-stream",
+            origin: window.location.origin // تم إضافة السطر ده
           },
         });
 
