@@ -27,7 +27,7 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
   // اختيار نوع العلامة الحالية (ألم، تورم، إلخ)
   const [activeMarkType, setActiveMarkType] = useState("Pain");
   // العرض الحالي: هل الجسم من الأمام ولا من الخلف؟
-  const [currentView, setCurrentView] =<span class="math-inline">ot("anterior"\);</span>
+  const [currentView, setCurrentView] = useState("anterior");
   const queryKey = ["body_marks", patientId, sessionId ?? "general"];
 
   // جلب العلامات المسجلة مسبقاً من قاعدة البيانات
