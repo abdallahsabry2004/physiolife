@@ -56,7 +56,7 @@ async function ensureFolder(auth: JWT, name: string, parentId?: string) {
 // 2. الدالة الأساسية: إعطاء تصريح الرفع المباشر للمتصفح
 export const getDriveUploadToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { patientId: string; category: string }) => data)
+  .validator((data: { patientId: string; category: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
@@ -97,7 +97,7 @@ export const getDriveUploadToken = createServerFn({ method: "POST" })
 // 3. دالة لحفظ بيانات الملف في قاعدة بيانات Supabase بعد ما الرفع المباشر ينجح
 export const saveFileRecord = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string }) => data)
+  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { error } = await supabase.from("patient_files").insert({
@@ -118,7 +118,7 @@ export const saveFileRecord = createServerFn({ method: "POST" })
 // 4. دالة حذف الملفات
 export const deletePatientFile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { fileId: string }) => data)
+  .validator((data: { fileId: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const { data: row, error } = await supabase
@@ -144,4 +144,34 @@ export const deletePatientFile = createServerFn({ method: "POST" })
 
     await supabase.from("patient_files").delete().eq("id", data.fileId);
     return { ok: true };
+  });
+
+// 5. دالة جلب مساحة التخزين (Storage Quota) باستخدام الـ Service Account
+export const getDriveQuota = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    try {
+      const auth = getGoogleAuth();
+      const token = await auth.getAccessToken();
+
+      const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
+        headers: {
+          Authorization: `Bearer ${token.token}`,
+        },
+      });
+
+      if (!res.ok) {
+        console.error("Failed to fetch drive quota");
+        return { limit: 0, usage: 0 };
+      }
+
+      const data = await res.json();
+      return {
+        limit: Number(data.storageQuota?.limit || 0),
+        usage: Number(data.storageQuota?.usage || 0),
+      };
+    } catch (error) {
+      console.error("Error fetching drive quota:", error);
+      return { limit: 0, usage: 0 };
+    }
   });
