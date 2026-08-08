@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -36,6 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   const items = nav.filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin);
 
@@ -119,8 +120,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               variant="secondary"
               size="sm"
               className="w-full"
-              onClick={() => {
-                void signOut();
+              onClick={async () => {
+                // ننتظر لحد ما عملية تسجيل الخروج تكتمل
+                await signOut();
+                // ننقل المستخدم لصفحة تسجيل الدخول الرئيسية
+                navigate({ to: "/" });
               }}
             >
               <LogOut className="me-2 h-4 w-4" /> {t("shell.signOut")}
