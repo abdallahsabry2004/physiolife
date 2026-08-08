@@ -75,28 +75,42 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       for (const file of fileList) {
+        // 1. طلب تصريح الرفع ومعرف الفولدر من السيرفر
         const { accessToken, folderId, storageAccountId } = await getToken({
           data: { patientId, category },
         });
 
         if (!accessToken) throw new Error("Failed to get upload authorization.");
 
-        const metadata = {
-          name: file.name,
-          parents: [folderId],
-        };
+        // 2. بدء الرفع المتقطع (Resumable Upload)
+        const initRes = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,size",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              "X-Upload-Content-Type": file.type || "application/octet-stream",
+              "X-Upload-Content-Length": file.size.toString(),
+            },
+            body: JSON.stringify({
+              name: file.name,
+              parents: [folderId],
+            }),
+          }
+        );
 
-        const formData = new FormData();
-        formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-        formData.append("file", file);
+        if (!initRes.ok) throw new Error("Failed to initialize Google Drive upload.");
 
+        // استخراج رابط الرفع المباشر من جوجل
+        const uploadUrl = initRes.headers.get("Location");
+        if (!uploadUrl) throw new Error("Google didn't return an upload URL.");
+
+        // 3. رفع الملف الفعلي باستخدام XMLHttpRequest لتتبع التقدم
         const driveData = await new Promise<any>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open(
-            "POST",
-            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,size"
-          );
-          xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+          xhr.open("PUT", uploadUrl);
+          // لا نحتاج لوضع Authorization هنا لأن رابط الرفع يحتوي على التصريح
 
           let lastTime = Date.now();
           let lastLoaded = 0;
@@ -132,15 +146,17 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             if (xhr.status >= 200 && xhr.status < 300) {
               resolve(JSON.parse(xhr.responseText));
             } else {
-              reject(new Error(`Upload to Google Drive failed: ${xhr.statusText}`));
+              reject(new Error(`Upload failed: ${xhr.statusText}`));
             }
           };
 
           xhr.onerror = () => reject(new Error("Network error during upload."));
 
-          xhr.send(formData);
+          // إرسال الملف الخام مباشرة بدون FormData
+          xhr.send(file);
         });
 
+        // 4. حفظ بيانات الملف في قاعدة بيانات Supabase
         await saveRecord({
           data: {
             patientId,
@@ -149,7 +165,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             mimeType: file.type || "application/octet-stream",
             size: Number(driveData.size || file.size),
             driveFileId: driveData.id,
-            webViewLink: driveData.webViewLink,
+            webViewLink: driveData.webViewLink || `https://drive.google.com/file/d/${driveData.id}/view`,
             storageAccountId: storageAccountId,
           },
         });
