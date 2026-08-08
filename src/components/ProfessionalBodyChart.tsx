@@ -140,7 +140,7 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
             src={
               currentView === "anterior"
                 ? "https://6a7798db51198decb752101a.imgix.net/sandbox/anterior%20body.jpg" // مثال لصورة تشريحية أمامية واضحة
-                : "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&q=80&w=600" // مثال لصورة تشريحية خلفية واضحة
+                : "https://6a7798db51198decb752101a.imgix.net/posterior%20body.jpg" // مثال لصورة تشريحية خلفية واضحة
             }
             alt="Anatomical Body Chart"
             className="h-full w-full object-contain opacity-75 dark:opacity-50 pointer-events-none select-none"
