@@ -104,10 +104,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-sidebar-border p-4">
-          <p className="truncate text-sm font-medium">{fullName || t("shell.staff")}</p>
-          <p className="mb-3 text-xs capitalize text-sidebar-foreground/60">
-            {roles.map((r) => r.replace("_", " ")).join(", ") || t("shell.noRole")}
-          </p>
+          {/* تم إضافة flex و justify-between لترتيب الاسم والأيقونة */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{fullName || t("shell.staff")}</p>
+              <p className="text-xs capitalize text-sidebar-foreground/60">
+                {roles.map((r) => r.replace("_", " ")).join(", ") || t("shell.noRole")}
+              </p>
+            </div>
+            
+            {/* الأيقونة اللي هتفتح الـ Popup */}
+            <UserProfileModal />
+          </div>
+
           <div className="space-y-2">
             <Button
               variant="ghost"
@@ -122,9 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               size="sm"
               className="w-full"
               onClick={async () => {
-                // ننتظر لحد ما عملية تسجيل الخروج تكتمل
                 await signOut();
-                // ننقل المستخدم لصفحة تسجيل الدخول الرئيسية
                 navigate({ to: "/" });
               }}
             >
