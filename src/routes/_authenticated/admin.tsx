@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus } from "lucide-react";
+import { HardDrive, Plus, UserX, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
@@ -97,6 +97,26 @@ function AdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // الـ Mutation الجديد الخاص بحذف واسترجاع المستخدم
+  const toggleUser = useMutation({
+    mutationFn: async ({ userId, activate }: { userId: string; activate: boolean }) => {
+      // 1. تحديث حالة المستخدم في جدول الـ profiles
+      const { error: pErr } = await supabase.from("profiles").update({ is_active: activate }).eq("id", userId);
+      if (pErr) throw pErr;
+      
+      // 2. لو بنعمل حذف (إيقاف)، نمسح الصلاحيات عشان يفقد الوصول للنظام
+      if (!activate) {
+        const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
+        if (rErr) throw rErr;
+      }
+    },
+    onSuccess: () => {
+      toast.success("User status updated");
+      void qc.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const addAccount = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -140,7 +160,10 @@ function AdminPage() {
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
             >
               <div>
-                <p className="font-medium">{s.full_name || s.email}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{s.full_name || s.email}</p>
+                  {!s.is_active && <Badge variant="destructive">Inactive</Badge>}
+                </div>
                 <p className="text-xs text-muted-foreground">{s.email}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -149,18 +172,43 @@ function AdminPage() {
                     {r.replace("_", " ")}
                   </Badge>
                 ))}
-                <Select onValueChange={(v) => setRole.mutate({ userId: s.id, role: v as AppRole })}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue placeholder="Change role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r} value={r} className="capitalize">
-                        {r.replace("_", " ")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                
+                {s.is_active ? (
+                  <>
+                    <Select onValueChange={(v) => setRole.mutate({ userId: s.id, role: v as AppRole })}>
+                      <SelectTrigger className="w-44">
+                        <SelectValue placeholder="Change role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLES.map((r) => (
+                          <SelectItem key={r} value={r} className="capitalize">
+                            {r.replace("_", " ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => {
+                        if (confirm("Are you sure you want to deactivate this user? They will lose access to the system.")) {
+                          toggleUser.mutate({ userId: s.id, activate: false });
+                        }
+                      }}
+                      title="Deactivate User"
+                    >
+                      <UserX className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => toggleUser.mutate({ userId: s.id, activate: true })}
+                  >
+                    <UserCheck className="mr-2 h-4 w-4" /> Restore Access
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -208,7 +256,6 @@ function AdminPage() {
       <ClinicalFieldCatalog />
 
       <Card>
-
         <CardHeader>
           <CardTitle className="text-base">Audit log</CardTitle>
         </CardHeader>
