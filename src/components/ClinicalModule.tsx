@@ -131,7 +131,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
       </div>
 
       {canEditClinical && (
-        <Card className="border-dashed">
+        <Card className="border-dashed print:hidden">
           <CardContent className="space-y-4 pt-6">
             <div>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -176,14 +176,14 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
           </p>
         )}
         {records.map((r) => (
-          <Card key={r.id}>
-            <CardContent className="pt-6">
+          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent">
+            <CardContent className="pt-6 print:p-0 print:py-1">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <Badge variant="secondary">{r.label}</Badge>
+                <Badge variant="secondary" className="print:bg-transparent print:border print:border-gray-300 print:text-black">{r.label}</Badge>
                 {canEditClinical && (
                   <button
                     onClick={() => removeItem.mutate(r.id)}
-                    className="text-muted-foreground transition hover:text-destructive"
+                    className="text-muted-foreground transition hover:text-destructive print:hidden"
                     aria-label={`Remove ${r.label}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -194,6 +194,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                 rows={2}
                 disabled={!canEditClinical}
                 value={drafts[r.id] ?? r.value ?? ""}
+                className="print:text-sm print:leading-relaxed"
                 onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
                 onBlur={(e) => {
                   if ((r.value ?? "") !== e.target.value) {
