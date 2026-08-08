@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,6 +16,7 @@ import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
 import { PatientMeasurements } from "@/components/PatientMeasurements";
+import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart"; // تم استدعاء الـ Chart الاحترافي
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,21 +44,8 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
   component: PatientDetail,
 });
 
-const MARK_TYPES = [
-  "Pain",
-  "Swelling",
-  "Scar",
-  "Bruise",
-  "Weakness",
-  "Spasm",
-  "Trigger Point",
-  "Numbness",
-  "Radiating Pain",
-];
-
 function PatientDetail() {
   const { id } = Route.useParams();
-  // إضافة fullName لاستخدامه في ترويسة الطباعة
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
@@ -82,35 +69,6 @@ function PatientDetail() {
       if (error) throw error;
       return data;
     },
-  });
-
-  const { data: marks = [] } = useQuery({
-    queryKey: ["marks", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("body_chart_marks")
-        .select("id, mark_type, x, y, note")
-        .eq("patient_id", id);
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const [markType, setMarkType] = useState<string>("Pain");
-
-  const addMark = useMutation({
-    mutationFn: async (pos: { x: number; y: number }) => {
-      const { error } = await supabase.from("body_chart_marks").insert({
-        patient_id: id,
-        mark_type: markType,
-        x: pos.x,
-        y: pos.y,
-        created_by: user?.id ?? null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["marks", id] }),
-    onError: (e: Error) => toast.error(e.message),
   });
 
   const newSession = useMutation({
@@ -172,7 +130,6 @@ function PatientDetail() {
       
       {/* 
         ======== ترويسة الطباعة الاحترافية (Print Header) ========
-        تظهر فقط في الورق المطبوع وتختفي من الموقع 
       */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
@@ -368,58 +325,10 @@ function PatientDetail() {
             </Card>
           ))}
         </TabsContent>
-
-        {/* ... بقية الـ Tabs ... */}
         
+        {/* استدعاء الـ Body Chart الاحترافي هنا */}
         <TabsContent value="body" className="mt-6 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {MARK_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setMarkType(t)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  markType === t
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <div
-            className="relative mx-auto h-[520px] w-full max-w-sm rounded-2xl border bg-secondary/40"
-            onClick={(e) => {
-              if (!canEditClinical) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              addMark.mutate({
-                x: ((e.clientX - rect.left) / rect.width) * 100,
-                y: ((e.clientY - rect.top) / rect.height) * 100,
-              });
-            }}
-          >
-            <svg viewBox="0 0 100 200" className="h-full w-full text-muted-foreground/40">
-              <circle cx="50" cy="18" r="12" fill="currentColor" />
-              <rect x="34" y="32" width="32" height="60" rx="12" fill="currentColor" />
-              <rect x="18" y="34" width="12" height="60" rx="6" fill="currentColor" />
-              <rect x="70" y="34" width="12" height="60" rx="6" fill="currentColor" />
-              <rect x="36" y="92" width="12" height="80" rx="6" fill="currentColor" />
-              <rect x="52" y="92" width="12" height="80" rx="6" fill="currentColor" />
-            </svg>
-            {marks.map((m) => (
-              <span
-                key={m.id}
-                title={m.mark_type}
-                style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow"
-              >
-                {m.mark_type}
-              </span>
-            ))}
-          </div>
-          <p className="text-center text-xs text-muted-foreground">
-            Pick a marker type, then tap the body chart to place it.
-          </p>
+          <ProfessionalBodyChart patientId={id} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
