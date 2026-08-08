@@ -65,7 +65,8 @@ async function ensureFolder(auth: JWT, name: string, parentId?: string) {
 // 2. الدالة الأساسية: طلب رابط الرفع المباشر (Upload URL) من جوجل درايف عبر السيرفر
 export const initiateDriveUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string }) => data)
+  // تم إضافة origin هنا عشان نستقبله من الواجهة
+  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; origin: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
@@ -101,6 +102,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token.token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
+          "Origin": data.origin, // الحل السحري: إخبار جوجل بالسماح للمتصفح بالرفع
         },
         body: JSON.stringify({
           name: data.fileName,
@@ -113,7 +115,6 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
       throw new Error("Failed to initialize Google Drive upload on server.");
     }
 
-    // جوجل بيبعت الرابط المخصص للرفع في الهيدر Location
     const uploadUrl = initRes.headers.get("Location");
     if (!uploadUrl) {
       throw new Error("Google didn't return an upload URL.");
