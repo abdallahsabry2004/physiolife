@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, Plus, Trash2, Pencil } from "lucide-react"; // تم إضافة Pencil
+import { CheckCircle2, Circle, Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -25,7 +25,8 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   const qc = useQueryClient();
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [exerciseId, setExerciseId] = useState("");
+  // تم تغيير القيمة الافتراضية لـ undefined لمنع مشاكل الـ Dropdown
+  const [exerciseId, setExerciseId] = useState<string | undefined>(undefined);
   const [sets, setSets] = useState("");
   const [reps, setReps] = useState("");
   const [frequency, setFrequency] = useState("");
@@ -102,13 +103,18 @@ export function PatientExercises({ patientId }: { patientId: string }) {
       }
     },
     onSuccess: () => {
-      setExerciseId("");
+      // حفظ حالة التعديل قبل تصفير الـ States عشان رسالة الـ Toast تكون مظبوطة
+      const isEdit = !!editingId;
+      
+      // تفريغ الخانات بشكل آمن
+      setExerciseId(undefined);
       setSets("");
       setReps("");
       setFrequency("");
       setNotes("");
       setEditingId(null);
-      toast.success(editingId ? "Exercise updated successfully" : "Exercise added to the home program");
+      
+      toast.success(isEdit ? "Exercise updated successfully" : "Exercise added to the home program");
       void qc.invalidateQueries({ queryKey: ["patient-exercises", patientId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -152,17 +158,17 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   // دالة لتجهيز بيانات التمرين في الـ Form عشان نعدلها
   const openEdit = (pex: any) => {
     setEditingId(pex.id);
-    setExerciseId(pex.exercise_id || "");
+    setExerciseId(pex.exercise_id || undefined); // استخدام undefined بشكل آمن
     setSets(pex.sets || "");
     setReps(pex.repetitions || "");
     setFrequency(pex.frequency || "");
     setNotes(pex.notes || "");
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // عشان يطلع يشوف الـ Form فوق
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setExerciseId("");
+    setExerciseId(undefined); // تصفير آمن
     setSets("");
     setReps("");
     setFrequency("");
@@ -222,7 +228,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             </div>
             <div className="md:col-span-2 flex gap-2">
               <Button onClick={() => assign.mutate()} disabled={assign.isPending || !exerciseId}>
-                {assign.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                <Plus className="mr-2 h-4 w-4" />
                 {editingId ? "Update exercise" : "Add to home program"}
               </Button>
               {editingId && (
