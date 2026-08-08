@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress"; // تم إضافة Progress
-import { getDriveQuota } from "@/lib/drive.functions"; // تم إضافة جلب المساحة
+import { Progress } from "@/components/ui/progress";
+import { getDriveQuota } from "@/lib/drive.functions";
 import {
   Select,
   SelectContent,
@@ -42,9 +42,11 @@ const ROLES: AppRole[] = ["super_admin", "therapist", "receptionist", "assistant
 function AdminPage() {
   const { isAdmin } = useAuth();
   const qc = useQueryClient();
+  
+  // States لحفظ بيانات الحساب الجديد
   const [driveEmail, setDriveEmail] = useState("");
+  const [driveFolderId, setDriveFolderId] = useState("");
 
-  // جلب مساحة التخزين للحساب الأساسي المربوط بالـ Gateway
   const { data: driveQuota, isLoading: isQuotaLoading } = useQuery({
     queryKey: ["drive_quota"],
     queryFn: async () => {
@@ -53,7 +55,6 @@ function AdminPage() {
     },
   });
 
-  // دوال مساعدة لتحويل الـ Bytes إلى جيجابايت
   const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(2);
   const usagePercentage = driveQuota?.limit 
     ? Math.min((driveQuota.usage / driveQuota.limit) * 100, 100) 
@@ -114,14 +115,11 @@ function AdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // الـ Mutation الجديد الخاص بحذف واسترجاع المستخدم
   const toggleUser = useMutation({
     mutationFn: async ({ userId, activate }: { userId: string; activate: boolean }) => {
-      // 1. تحديث حالة المستخدم في جدول الـ profiles
       const { error: pErr } = await supabase.from("profiles").update({ is_active: activate }).eq("id", userId);
       if (pErr) throw pErr;
       
-      // 2. لو بنعمل حذف (إيقاف)، نمسح الصلاحيات عشان يفقد الوصول للنظام
       if (!activate) {
         const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
         if (rErr) throw rErr;
@@ -136,14 +134,23 @@ function AdminPage() {
 
   const addAccount = useMutation({
     mutationFn: async () => {
+      if (!driveEmail.trim() || !driveFolderId.trim()) {
+        throw new Error("Please provide both email and folder ID.");
+      }
+      
       const { error } = await supabase
         .from("storage_accounts")
-        .insert({ email: driveEmail, label: "Additional storage" });
+        .insert({ 
+          email: driveEmail.trim(), 
+          root_folder_id: driveFolderId.trim(),
+          label: "Additional storage" 
+        });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Storage account added");
+      toast.success("Storage account added successfully!");
       setDriveEmail("");
+      setDriveFolderId("");
       void qc.invalidateQueries({ queryKey: ["storage_accounts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -240,7 +247,6 @@ function AdminPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           
-          {/* جزء عرض المساحة للحساب الأساسي المربوط */}
           <div className="space-y-2 rounded-lg border bg-secondary/30 p-4">
             <div className="flex justify-between items-center mb-1">
               <span className="text-sm font-semibold">Primary Connected Account Quota</span>
@@ -260,34 +266,56 @@ function AdminPage() {
             </p>
           </div>
 
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Add an extra Google account email for organizing folders. (Note: System still uses the primary authorized API key for uploads).
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Input
-                className="max-w-sm"
-                placeholder="extra.storage@gmail.com"
-                value={driveEmail}
-                onChange={(e) => setDriveEmail(e.target.value)}
-              />
-              <Button onClick={() => addAccount.mutate()} disabled={!driveEmail}>
-                <Plus className="mr-2 h-4 w-4" /> Add account
+          <div className="space-y-4 rounded-lg border p-4 bg-card">
+            <h3 className="text-sm font-semibold">How to add additional storage?</h3>
+            <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1.5 mb-4">
+              <li>Create a new folder in the new Gmail account you want to use.</li>
+              <li>Share this folder with your primary clinic email (<code>physiolife.ptcenter@gmail.com</code>) as an <strong>Editor</strong>.</li>
+              <li>Copy the <strong>Folder ID</strong> from the URL (the part after <code>folders/</code>).</li>
+              <li>Paste the email and the Folder ID below to link it.</li>
+            </ol>
+            
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
+              <div className="space-y-1.5">
+                <Label>Gmail Address</Label>
+                <Input
+                  placeholder="extra.storage@gmail.com"
+                  value={driveEmail}
+                  onChange={(e) => setDriveEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Folder ID</Label>
+                <Input
+                  placeholder="1A2b3C4d5E6f7G8h9I0j..."
+                  value={driveFolderId}
+                  onChange={(e) => setDriveFolderId(e.target.value)}
+                />
+              </div>
+              <Button 
+                onClick={() => addAccount.mutate()} 
+                disabled={!driveEmail || !driveFolderId || addAccount.isPending}
+              >
+                {addAccount.isPending ? "Adding..." : <><Plus className="mr-2 h-4 w-4" /> Add account</>}
               </Button>
             </div>
-            <div className="space-y-2">
-              {accounts.map((a) => (
-                <div key={a.id} className="flex justify-between rounded-lg border p-3 text-sm">
-                  <span>{a.email}</span>
-                  <Badge variant={a.is_primary ? "default" : "secondary"}>
-                    {a.is_primary ? "primary" : a.is_active ? "active" : "inactive"}
-                  </Badge>
+          </div>
+
+          <div className="space-y-2">
+            {accounts.map((a) => (
+              <div key={a.id} className="flex justify-between items-center rounded-lg border p-3 text-sm">
+                <div>
+                  <p className="font-medium">{a.email}</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Folder: {a.root_folder_id || "N/A"}</p>
                 </div>
-              ))}
-              {accounts.length === 0 && (
-                <p className="text-sm text-muted-foreground">No additional accounts yet.</p>
-              )}
-            </div>
+                <Badge variant={a.is_primary ? "default" : "secondary"}>
+                  {a.is_primary ? "primary" : a.is_active ? "active" : "inactive"}
+                </Badge>
+              </div>
+            ))}
+            {accounts.length === 0 && (
+              <p className="text-sm text-muted-foreground">No additional accounts yet.</p>
+            )}
           </div>
         </CardContent>
       </Card>
