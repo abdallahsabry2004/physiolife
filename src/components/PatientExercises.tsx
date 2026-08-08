@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, Plus, Trash2, Pencil } from "lucide-react"; // تم إضافة Pencil
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -24,6 +24,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   const { user, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [exerciseId, setExerciseId] = useState("");
   const [sets, setSets] = useState("");
   const [reps, setReps] = useState("");
@@ -72,16 +73,33 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   const assign = useMutation({
     mutationFn: async () => {
       if (!exerciseId) throw new Error("Pick an exercise first");
-      const { error } = await supabase.from("patient_exercises").insert({
-        patient_id: patientId,
-        exercise_id: exerciseId,
-        sets: sets || null,
-        repetitions: reps || null,
-        frequency: frequency || null,
-        notes: notes || null,
-        assigned_by: user?.id ?? null,
-      });
-      if (error) throw error;
+      
+      if (editingId) {
+        // تحديث التمرين الحالي
+        const { error } = await supabase
+          .from("patient_exercises")
+          .update({
+            exercise_id: exerciseId,
+            sets: sets || null,
+            repetitions: reps || null,
+            frequency: frequency || null,
+            notes: notes || null,
+          })
+          .eq("id", editingId);
+        if (error) throw error;
+      } else {
+        // إضافة تمرين جديد
+        const { error } = await supabase.from("patient_exercises").insert({
+          patient_id: patientId,
+          exercise_id: exerciseId,
+          sets: sets || null,
+          repetitions: reps || null,
+          frequency: frequency || null,
+          notes: notes || null,
+          assigned_by: user?.id ?? null,
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       setExerciseId("");
@@ -89,7 +107,8 @@ export function PatientExercises({ patientId }: { patientId: string }) {
       setReps("");
       setFrequency("");
       setNotes("");
-      toast.success("Exercise added to the home program");
+      setEditingId(null);
+      toast.success(editingId ? "Exercise updated successfully" : "Exercise added to the home program");
       void qc.invalidateQueries({ queryKey: ["patient-exercises", patientId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -100,7 +119,10 @@ export function PatientExercises({ patientId }: { patientId: string }) {
       const { error } = await supabase.from("patient_exercises").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["patient-exercises", patientId] }),
+    onSuccess: () => {
+      toast.success("Exercise removed");
+      void qc.invalidateQueries({ queryKey: ["patient-exercises", patientId] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -127,6 +149,26 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // دالة لتجهيز بيانات التمرين في الـ Form عشان نعدلها
+  const openEdit = (pex: any) => {
+    setEditingId(pex.id);
+    setExerciseId(pex.exercise_id || "");
+    setSets(pex.sets || "");
+    setReps(pex.repetitions || "");
+    setFrequency(pex.frequency || "");
+    setNotes(pex.notes || "");
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // عشان يطلع يشوف الـ Form فوق
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setExerciseId("");
+    setSets("");
+    setReps("");
+    setFrequency("");
+    setNotes("");
+  };
+
   const doneCount = logs.filter((l) => l.completed).length;
   const last7 = logs.filter(
     (l) => l.completed && l.log_date >= new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10),
@@ -135,9 +177,11 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-6">
       {canEditClinical && (
-        <Card>
+        <Card className={editingId ? "border-primary" : ""}>
           <CardHeader>
-            <CardTitle className="text-base">Prescribe an exercise</CardTitle>
+            <CardTitle className="text-base">
+              {editingId ? "Edit prescribed exercise" : "Prescribe an exercise"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
@@ -176,10 +220,16 @@ export function PatientExercises({ patientId }: { patientId: string }) {
               <Label>Notes for the patient</Label>
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
-            <div className="md:col-span-2">
-              <Button onClick={() => assign.mutate()} disabled={assign.isPending}>
-                <Plus className="mr-2 h-4 w-4" /> Add to home program
+            <div className="md:col-span-2 flex gap-2">
+              <Button onClick={() => assign.mutate()} disabled={assign.isPending || !exerciseId}>
+                {assign.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                {editingId ? "Update exercise" : "Add to home program"}
               </Button>
+              {editingId && (
+                <Button variant="outline" onClick={cancelEdit}>
+                  Cancel
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -204,7 +254,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
           const total = logs.filter((l) => l.patient_exercise_id === pex.id && l.completed).length;
           return (
             <Card key={pex.id}>
-              <CardHeader className="flex-row items-start justify-between gap-2">
+              <CardHeader className="flex-row items-start justify-between gap-2 pb-2">
                 <div>
                   <CardTitle className="text-base">
                     {pex.exercises?.name ?? "Custom exercise"}
@@ -216,19 +266,35 @@ export function PatientExercises({ patientId }: { patientId: string }) {
                   </p>
                 </div>
                 {canEditClinical && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => remove.mutate(pex.id)}
-                    aria-label="Remove exercise"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-primary"
+                      onClick={() => openEdit(pex)}
+                      aria-label="Edit exercise"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (confirm("Are you sure you want to remove this exercise from the patient's program?")) {
+                          remove.mutate(pex.id);
+                        }
+                      }}
+                      aria-label="Remove exercise"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </CardHeader>
               <CardContent className="space-y-3">
                 {pex.notes && <p className="text-sm text-muted-foreground">{pex.notes}</p>}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-2">
                   <span className="text-xs text-muted-foreground">{total} sessions logged</span>
                   <Button
                     variant={done ? "default" : "outline"}
