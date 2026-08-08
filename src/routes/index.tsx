@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -32,10 +33,12 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  // ضفنا حالة verify ومسحنا forgot لأننا هننقله لصفحة منفصلة
+  const [mode, setMode] = useState<"signin" | "signup" | "verify">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [otp, setOtp] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -59,23 +62,39 @@ function LoginPage() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
             data: { full_name: fullName },
           },
         });
         if (error) throw error;
-        toast.success("Account created. Check your email to confirm, then sign in.");
-        setMode("signin");
-      } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
-        });
-        if (error) throw error;
-        toast.success("Reset instructions sent to your email.");
-        setMode("signin");
+        toast.success("A 6-digit code has been sent to your email.");
+        setMode("verify"); // النقل لخطوة إدخال الـ OTP
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // دالة مخصصة لتأكيد الـ OTP للحساب الجديد
+  const verifySignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length < 6) return toast.error("Please enter the complete 6-digit OTP.");
+    
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: "signup",
+      });
+      
+      if (error) throw error;
+
+      toast.success("Account verified successfully! You are now signed in.");
+      void navigate({ to: "/dashboard" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid or expired code.");
     } finally {
       setBusy(false);
     }
@@ -103,40 +122,67 @@ function LoginPage() {
       </div>
 
       <div className="flex items-center justify-center p-6">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md shadow-lg">
           <CardContent className="pt-8">
             <div className="mb-6 flex items-center gap-3 lg:hidden">
               <img src={logo} alt="Physio Life" width={40} height={40} className="h-10 w-10" />
               <span className="font-bold">Physio Life</span>
             </div>
-            <h2 className="text-2xl font-semibold">
-              {mode === "signin" ? "Staff sign in" : mode === "signup" ? "Create account" : "Reset password"}
+            
+            <h2 className="text-2xl font-semibold mb-2">
+              {mode === "signin" ? "Staff sign in" : mode === "signup" ? "Create account" : "Verify Account"}
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {mode === "forgot"
-                ? "We'll email you a link to set a new password."
+            
+            <p className="text-sm text-muted-foreground mb-6">
+              {mode === "verify"
+                ? "Enter the 6-digit code sent to your email to activate your account."
                 : "Access is restricted to clinic staff."}
             </p>
 
-            <form onSubmit={submit} className="mt-6 space-y-4">
-              {mode === "signup" && (
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full name</Label>
-                  <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+            {mode === "verify" ? (
+              <form onSubmit={verifySignup} className="space-y-6">
+                <div className="space-y-2 flex flex-col items-center">
+                  <Label htmlFor="otp" className="w-full text-left">OTP Code</Label>
+                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              {mode !== "forgot" && (
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Verify & Sign In
+                </Button>
+                <div className="mt-4 text-center text-sm text-muted-foreground">
+                  <button type="button" className="hover:underline" onClick={() => setMode("signup")}>
+                    Back to sign up
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={submit} className="space-y-4">
+                {mode === "signup" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full name</Label>
+                    <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <Input
@@ -149,42 +195,45 @@ function LoginPage() {
                     minLength={6}
                   />
                 </div>
-              )}
-              {mode === "signin" && (
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={remember}
-                      onCheckedChange={(v) => setRemember(Boolean(v))}
-                    />
-                    Remember me
-                  </label>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-primary hover:underline"
-                    onClick={() => setMode("forgot")}
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset email"}
-              </Button>
-            </form>
+                
+                {mode === "signin" && (
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Checkbox
+                        checked={remember}
+                        onCheckedChange={(v) => setRemember(Boolean(v))}
+                      />
+                      Remember me
+                    </label>
+                    <Link
+                      to="/reset-password"
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                )}
+                
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {mode === "signin" ? "Sign in" : "Create account"}
+                </Button>
+              </form>
+            )}
 
-            <div className="mt-6 text-center text-sm text-muted-foreground">
-              {mode === "signin" ? (
-                <button className="hover:underline" onClick={() => setMode("signup")}>
-                  First staff account? Create it here
-                </button>
-              ) : (
-                <button className="hover:underline" onClick={() => setMode("signin")}>
-                  Back to sign in
-                </button>
-              )}
-            </div>
+            {mode !== "verify" && (
+              <div className="mt-6 text-center text-sm text-muted-foreground">
+                {mode === "signin" ? (
+                  <button className="hover:underline" onClick={() => setMode("signup")}>
+                    First staff account? Create it here
+                  </button>
+                ) : (
+                  <button className="hover:underline" onClick={() => setMode("signin")}>
+                    Back to sign in
+                  </button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
