@@ -1,9 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react"; // تم إضافة Trash2 هنا
+import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import {
   Line,
   LineChart,
@@ -25,6 +24,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+// استيراد لوجو المركز
+import logo from "@/assets/physio-life-logo.png";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
   head: () => ({
@@ -56,7 +58,8 @@ const MARK_TYPES = [
 
 function PatientDetail() {
   const { id } = Route.useParams();
-  const { user, canEditClinical } = useAuth();
+  // إضافة fullName لاستخدامه في ترويسة الطباعة
+  const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
   const { data: patient } = useQuery({
@@ -141,7 +144,6 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // تم إضافة دالة حذف الجلسة هنا
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
       const { error } = await supabase.from("treatment_sessions").delete().eq("id", sessionId);
@@ -167,6 +169,37 @@ function PatientDetail() {
 
   return (
     <div className="space-y-6">
+      
+      {/* 
+        ======== ترويسة الطباعة الاحترافية (Print Header) ========
+        تظهر فقط في الورق المطبوع وتختفي من الموقع 
+      */}
+      <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <img src={logo} alt="Physio Life" className="h-16 w-16" />
+            <div>
+              <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+              <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+            </div>
+          </div>
+          <div className="text-right text-xs text-gray-500 space-y-1">
+            <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
+            <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
+          <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
+            <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
+          </div>
+        </div>
+      </div>
+      {/* ======================================================== */}
+
       <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
           <Link to="/patients" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -183,7 +216,7 @@ function PatientDetail() {
             {patient.status}
           </Badge>
           <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" /> Print / PDF
+            <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>
         </div>
       </div>
@@ -200,7 +233,6 @@ function PatientDetail() {
           <TabsTrigger value="program">Home program</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
-
 
         <TabsContent value="history" className="mt-6">
           <ClinicalModule
@@ -228,7 +260,7 @@ function PatientDetail() {
 
         <TabsContent value="sessions" className="mt-6 space-y-4">
           {canEditClinical && (
-            <Button onClick={() => newSession.mutate()}>
+            <Button onClick={() => newSession.mutate()} className="print:hidden">
               <Plus className="mr-2 h-4 w-4" /> Open a new visit
             </Button>
           )}
@@ -236,17 +268,16 @@ function PatientDetail() {
             <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
           )}
           {sessions.map((s) => (
-            <Card key={s.id}>
-              {/* تعديل الـ Header لإضافة زرار المسح */}
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">
+            <Card key={s.id} className="print:mb-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 print:pb-1">
+                <CardTitle className="text-base font-bold text-primary print:text-black">
                   Session #{s.session_number} · {s.session_date}
                 </CardTitle>
                 {canEditClinical && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-muted-foreground hover:text-destructive"
+                    className="text-muted-foreground hover:text-destructive print:hidden"
                     onClick={() => {
                       if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
                         deleteSession.mutate(s.id);
@@ -257,15 +288,16 @@ function PatientDetail() {
                   </Button>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 print:space-y-2">
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["subjective", "objective", "assessment", "plan"] as const).map((k) => (
-                    <div key={k} className="space-y-2">
-                      <Label className="capitalize">{k}</Label>
+                    <div key={k} className="space-y-2 print:space-y-0">
+                      <Label className="capitalize font-bold text-gray-700">{k}</Label>
                       <Textarea
                         rows={3}
                         disabled={!canEditClinical}
                         defaultValue={s[k] ?? ""}
+                        className="print:text-sm print:leading-relaxed"
                         onBlur={(e) => {
                           if ((s[k] ?? "") !== e.target.value)
                             updateSession.mutate({ sid: s.id, patch: { [k]: e.target.value } });
@@ -274,9 +306,9 @@ function PatientDetail() {
                     </div>
                   ))}
                 </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Pain before (0-10)</Label>
+                <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 pt-2">
+                  <div className="space-y-2 print:space-y-0">
+                    <Label className="font-bold text-gray-700">Pain before (0-10)</Label>
                     <Input
                       type="number"
                       min={0}
@@ -291,8 +323,8 @@ function PatientDetail() {
                       }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Pain after (0-10)</Label>
+                  <div className="space-y-2 print:space-y-0">
+                    <Label className="font-bold text-gray-700">Pain after (0-10)</Label>
                     <Input
                       type="number"
                       min={0}
@@ -307,8 +339,8 @@ function PatientDetail() {
                       }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Duration (min)</Label>
+                  <div className="space-y-2 print:space-y-0">
+                    <Label className="font-bold text-gray-700">Duration (min)</Label>
                     <Input
                       type="number"
                       disabled={!canEditClinical}
@@ -324,20 +356,71 @@ function PatientDetail() {
                     />
                   </div>
                 </div>
-                <ClinicalModule
-                  patientId={id}
-                  module="session"
-                  sessionId={s.id}
-                  title="Interventions performed"
-                />
+                <div className="pt-2">
+                  <ClinicalModule
+                    patientId={id}
+                    module="session"
+                    sessionId={s.id}
+                    title="Interventions performed"
+                  />
+                </div>
               </CardContent>
             </Card>
           ))}
         </TabsContent>
 
+        {/* ... بقية الـ Tabs ... */}
+        
         <TabsContent value="body" className="mt-6 space-y-4">
-  <ProfessionalBodyChart patientId={id} />
-</TabsContent>
+          <div className="flex flex-wrap gap-2">
+            {MARK_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setMarkType(t)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  markType === t
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div
+            className="relative mx-auto h-[520px] w-full max-w-sm rounded-2xl border bg-secondary/40"
+            onClick={(e) => {
+              if (!canEditClinical) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              addMark.mutate({
+                x: ((e.clientX - rect.left) / rect.width) * 100,
+                y: ((e.clientY - rect.top) / rect.height) * 100,
+              });
+            }}
+          >
+            <svg viewBox="0 0 100 200" className="h-full w-full text-muted-foreground/40">
+              <circle cx="50" cy="18" r="12" fill="currentColor" />
+              <rect x="34" y="32" width="32" height="60" rx="12" fill="currentColor" />
+              <rect x="18" y="34" width="12" height="60" rx="6" fill="currentColor" />
+              <rect x="70" y="34" width="12" height="60" rx="6" fill="currentColor" />
+              <rect x="36" y="92" width="12" height="80" rx="6" fill="currentColor" />
+              <rect x="52" y="92" width="12" height="80" rx="6" fill="currentColor" />
+            </svg>
+            {marks.map((m) => (
+              <span
+                key={m.id}
+                title={m.mark_type}
+                style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow"
+              >
+                {m.mark_type}
+              </span>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground">
+            Pick a marker type, then tap the body chart to place it.
+          </p>
+        </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
           <Card>
