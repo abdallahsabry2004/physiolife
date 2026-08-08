@@ -1,160 +1,124 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { JWT } from "google-auth-library";
 
-const GATEWAY = "https://connector-gateway.lovable.dev/google_drive";
-const FOLDER_MIME = "application/vnd.google-apps.folder";
+// 1. إعداد مصادقة جوجل باستخدام الـ Service Account
+function getGoogleAuth() {
+  const email = process.env.GOOGLE_CLIENT_EMAIL;
+  // معالجة الـ Private Key عشان يتقرأ صح من الـ Environment Variables
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-type DriveFile = { id: string; name?: string; webViewLink?: string };
-
-function driveHeaders() {
-  const lovableKey = process.env["LOVABLE_API_KEY"];
-  const connectionKey = process.env["GOOGLE_DRIVE_API_KEY"];
-  if (!lovableKey || !connectionKey) {
-    throw new Error("Google Drive is not connected yet for this project.");
+  if (!email || !privateKey) {
+    throw new Error("Google Cloud credentials are missing.");
   }
-  return {
-    Authorization: `Bearer ${lovableKey}`,
-    "X-Connection-Api-Key": connectionKey,
-  };
-}
 
-async function driveFetch(path: string, init: RequestInit = {}) {
-  const res = await fetch(`${GATEWAY}${path}`, {
-    ...init,
-    headers: { ...driveHeaders(), ...(init.headers ?? {}) },
+  return new JWT({
+    email,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/drive.file"],
   });
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`[Drive] ${path} failed [${res.status}]: ${body}`);
-    throw new Error(`Google Drive request failed [${res.status}]: ${body}`);
-  }
-  return res;
 }
 
-/** Find (or create) a folder by name, optionally inside a parent folder. */
-async function ensureFolder(name: string, parentId?: string | null): Promise<string> {
-  const clauses = [
-    `mimeType='${FOLDER_MIME}'`,
-    `name='${name.replace(/'/g, "\\'")}'`,
-    "trashed=false",
-    parentId ? `'${parentId}' in parents` : null,
-  ].filter(Boolean) as string[];
+// دالة مساعدة لإنشاء فولدر جوة جوجل درايف
+async function ensureFolder(auth: JWT, name: string, parentId?: string) {
+  const driveApiUrl = "https://www.googleapis.com/drive/v3/files";
+  const token = await auth.getAccessToken();
 
-  const search = await driveFetch(
-    `/drive/v3/files?q=${encodeURIComponent(clauses.join(" and "))}&fields=files(id,name)&pageSize=1`,
-  );
-  const found = (await search.json()) as { files?: DriveFile[] };
-  const existing = found.files?.[0]?.id;
-  if (existing) return existing;
+  // البحث عن الفولدر
+  const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false ${parentId ? `and '${parentId}' in parents` : ""}`;
+  const searchRes = await fetch(`${driveApiUrl}?q=${encodeURIComponent(q)}&fields=files(id)`, {
+    headers: { Authorization: `Bearer ${token.token}` },
+  });
+  
+  const searchData = await searchRes.json();
+  if (searchData.files && searchData.files.length > 0) {
+    return searchData.files[0].id;
+  }
 
-  const created = await driveFetch(`/drive/v3/files?fields=id`, {
+  // إنشاء الفولدر لو مش موجود
+  const createRes = await fetch(driveApiUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${token.token}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       name,
-      mimeType: FOLDER_MIME,
-      ...(parentId ? { parents: [parentId] } : {}),
+      mimeType: "application/vnd.google-apps.folder",
+      parents: parentId ? [parentId] : undefined,
     }),
   });
-  const folder = (await created.json()) as DriveFile;
-  return folder.id;
+  
+  const createData = await createRes.json();
+  return createData.id;
 }
 
-type UploadInput = {
-  patientId: string;
-  category: string;
-  fileName: string;
-  mimeType: string;
-  /** base64 (no data-url prefix) */
-  content: string;
-};
-
-export const uploadPatientFile = createServerFn({ method: "POST" })
+// 2. الدالة الأساسية: إعطاء تصريح الرفع المباشر للمتصفح
+export const getDriveUploadToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: UploadInput) => {
-    if (!data?.patientId || !data.fileName || !data.content) {
-      throw new Error("Missing file data");
-    }
-    // تم إزالة شرط الـ 30_000_000 من هنا للسماح بأي مساحة
-    return {
-      patientId: data.patientId,
-      category: data.category || "Other",
-      fileName: data.fileName.slice(0, 200),
-      mimeType: data.mimeType || "application/octet-stream",
-      content: data.content,
-    };
-  })
+  .inputValidator((data: { patientId: string; category: string }) => data)
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase } = context;
 
+    // جلب بيانات المريض
     const { data: patient, error: patientError } = await supabase
       .from("patients")
       .select("id, code, full_name")
       .eq("id", data.patientId)
       .single();
-    if (patientError || !patient) throw new Error("Patient not found or not accessible.");
+      
+    if (patientError || !patient) throw new Error("Patient not found.");
 
-    // Pick the active storage account (primary first) for multi-Drive support.
+    // جلب الحساب الأساسي (هنا بنجيب الـ Root Folder ID اللي الـ Admin حطه)
     const { data: account } = await supabase
       .from("storage_accounts")
-      .select("id, email, root_folder_id, is_primary")
+      .select("id, root_folder_id")
       .eq("is_active", true)
       .order("is_primary", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const rootId = account?.root_folder_id ?? (await ensureFolder("Physio Life Patients", null));
-    const patientFolderId = await ensureFolder(
-      `${patient.code} - ${patient.full_name}`.slice(0, 120),
-      rootId,
-    );
-    const categoryFolderId = await ensureFolder(data.category, patientFolderId);
+    const auth = getGoogleAuth();
+    const token = await auth.getAccessToken();
 
-    const boundary = `physiolife-${crypto.randomUUID()}`;
-    const metadata = JSON.stringify({
-      name: data.fileName,
-      parents: [categoryFolderId],
-    });
-    const body = Buffer.concat([
-      Buffer.from(
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${data.mimeType}\r\nContent-Transfer-Encoding: base64\r\n\r\n`,
-      ),
-      Buffer.from(data.content),
-      Buffer.from(`\r\n--${boundary}--\r\n`),
-    ]);
+    // التأكد من وجود فولدر المريض وفولدر التصنيف (X-ray, MRI, etc.)
+    const rootId = account?.root_folder_id; 
+    const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId);
+    const categoryFolderId = await ensureFolder(auth, data.category, patientFolderId);
 
-    const uploaded = await driveFetch(
-      `/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,size,mimeType`,
-      {
-        method: "POST",
-        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-        body,
-      },
-    );
-    const file = (await uploaded.json()) as DriveFile & { size?: string };
+    // إرجاع التوكن ومعرف الفولدر للمتصفح عشان يبدأ الرفع
+    return {
+      accessToken: token.token,
+      folderId: categoryFolderId,
+      storageAccountId: account?.id,
+    };
+  });
 
-    const { error: insertError } = await supabase.from("patient_files").insert({
+// 3. دالة لحفظ بيانات الملف في قاعدة بيانات Supabase بعد ما الرفع المباشر ينجح
+export const saveFileRecord = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase.from("patient_files").insert({
       patient_id: data.patientId,
       category: data.category,
       file_name: data.fileName,
       mime_type: data.mimeType,
-      size_bytes: file.size ? Number(file.size) : null,
-      drive_file_id: file.id,
-      drive_web_view_link: file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`,
-      storage_account_id: account?.id ?? null,
+      size_bytes: data.size,
+      drive_file_id: data.driveFileId,
+      drive_web_view_link: data.webViewLink,
+      storage_account_id: data.storageAccountId || null,
       uploaded_by: userId,
     });
-    if (insertError) throw new Error(insertError.message);
-
-    return { ok: true, driveFileId: file.id };
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
+// 4. دالة حذف الملفات
 export const deletePatientFile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { fileId: string }) => {
-    if (!data?.fileId) throw new Error("Missing file id");
-    return data;
-  })
+  .inputValidator((data: { fileId: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const { data: row, error } = await supabase
@@ -162,33 +126,22 @@ export const deletePatientFile = createServerFn({ method: "POST" })
       .select("id, drive_file_id")
       .eq("id", data.fileId)
       .single();
-    if (error || !row) throw new Error("File not found or not accessible.");
+      
+    if (error || !row) throw new Error("File not found.");
 
     if (row.drive_file_id) {
       try {
-        await driveFetch(`/drive/v3/files/${row.drive_file_id}`, { method: "DELETE" });
+        const auth = getGoogleAuth();
+        const token = await auth.getAccessToken();
+        await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token.token}` },
+        });
       } catch (e) {
-        console.error("[Drive] delete failed, removing metadata anyway", e);
+        console.error("Drive delete failed", e);
       }
     }
 
-    const { error: delError } = await supabase.from("patient_files").delete().eq("id", data.fileId);
-    if (delError) throw new Error(delError.message);
+    await supabase.from("patient_files").delete().eq("id", data.fileId);
     return { ok: true };
-  });
-
-// دالة جديدة لجلب مساحة التخزين من حساب جوجل درايف الأساسي المربوط
-export const getDriveQuota = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    // استدعاء بيانات المساحة من Google Drive API
-    const res = await driveFetch(`/drive/v3/about?fields=storageQuota`);
-    const data = (await res.json()) as { 
-      storageQuota?: { limit?: string; usage?: string; usageInDrive?: string } 
-    };
-    
-    return {
-      limit: Number(data.storageQuota?.limit || 0),
-      usage: Number(data.storageQuota?.usage || 0),
-    };
   });
