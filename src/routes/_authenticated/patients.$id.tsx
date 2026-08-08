@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
+import { PatientExercises } from "@/components/PatientExercises";
+import { PatientMeasurements } from "@/components/PatientMeasurements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
