@@ -382,9 +382,18 @@ function PatientDetail() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="measures" className="mt-6">
+          <PatientMeasurements patientId={id} />
+        </TabsContent>
+
+        <TabsContent value="program" className="mt-6">
+          <PatientExercises patientId={id} />
+        </TabsContent>
+
         <TabsContent value="files" className="mt-6">
           <PatientFiles patientId={id} />
         </TabsContent>
+
 
       </Tabs>
     </div>
