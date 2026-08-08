@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, RotateCcw } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider"; // تم إضافة الـ Slider للتحكم في الحجم
 
 type Props = {
   patientId: string;
@@ -24,13 +25,15 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
   const { canEditClinical, user } = useAuth();
   const qc = useQueryClient();
   
-  // اختيار نوع العلامة الحالية (ألم، تورم، إلخ)
   const [activeMarkType, setActiveMarkType] = useState("Pain");
-  // العرض الحالي: هل الجسم من الأمام ولا من الخلف؟
   const [currentView, setCurrentView] = useState("anterior");
-  const queryKey = ["body_marks", patientId, sessionId ?? "general"];
+  
+  // State للتحكم في حجم العلامات (افتراضي 75%)
+  const [markerSize, setMarkerSize] = useState([75]);
 
-  // جلب العلامات المسجلة مسبقاً من قاعدة البيانات
+  // إضافة currentView للـ queryKey عشان نفصل علامات الأمام عن الخلف
+  const queryKey = ["body_marks", patientId, sessionId ?? "general", currentView];
+
   const { data: marks = [] } = useQuery({
     queryKey,
     queryFn: async () => {
@@ -52,7 +55,6 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
     },
   });
 
-  // إضافة علامة جديدة عند النقر على الصورة
   const addMark = useMutation({
     mutationFn: async (pos: { x: number; y: number }) => {
       const { error } = await supabase.from("body_chart_marks").insert({
@@ -72,7 +74,6 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // حذف علامة تم وضعها بالخطأ
   const removeMark = useMutation({
     mutationFn: async (markId: string) => {
       const { error } = await supabase.from("body_chart_marks").delete().eq("id", markId);
@@ -87,8 +88,9 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* أدوات التحكم في العرض (أمام / خلف) وتحديد نوع الإصابة */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-card p-4 rounded-xl border">
+        
+        {/* أزرار التبديل بين الأمام والخلف */}
         <div className="flex items-center gap-2">
           <Button
             variant={currentView === "anterior" ? "default" : "outline"}
@@ -106,12 +108,13 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        {/* أنواع العلامات */}
+        <div className="flex flex-wrap gap-1.5 flex-1 justify-center md:justify-start md:ml-4">
           {MARK_TYPES.map((m) => (
             <button
               key={m.label}
               onClick={() => setActiveMarkType(m.label)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition border ${
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition border ${
                 activeMarkType === m.label
                   ? "ring-2 ring-ring border-transparent font-bold " + m.color
                   : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -121,9 +124,24 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
             </button>
           ))}
         </div>
+
+        {/* أداة التحكم في حجم العلامات */}
+        <div className="flex items-center gap-3 border-l pl-4 rtl:border-r rtl:border-l-0 rtl:pr-4 rtl:pl-0 min-w-[140px]">
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap font-medium">
+            Marker Size
+          </span>
+          <Slider
+            value={markerSize}
+            onValueChange={setMarkerSize}
+            min={30}
+            max={150}
+            step={5}
+            className="w-20"
+          />
+        </div>
       </div>
 
-      {/* منطقة الرسم والتفاعل الواقعية */}
+      {/* منطقة الرسم */}
       <div className="relative mx-auto flex justify-center bg-secondary/20 p-6 rounded-2xl border">
         <div
           className="relative h-[600px] w-full max-w-md cursor-crosshair rounded-xl overflow-hidden shadow-inner bg-white dark:bg-zinc-950 flex items-center justify-center border"
@@ -135,46 +153,55 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
             addMark.mutate({ x, y });
           }}
         >
-          {/* صورة تشریحیة واقعية تعبيرية تعتمد على الجانب (أمام أو خلف) */}
           <img
             src={
               currentView === "anterior"
-                ? "https://6a7798db51198decb752101a.imgix.net/sandbox/anterior%20body.jpg" // مثال لصورة تشريحية أمامية واضحة
-                : "https://6a7798db51198decb752101a.imgix.net/posterior%20body.jpg" // مثال لصورة تشريحية خلفية واضحة
+                ? "https://6a7798db51198decb752101a.imgix.net/sandbox/anterior%20body.jpg"
+                : "https://6a7798db51198decb752101a.imgix.net/posterior%20body.jpg"
             }
             alt="Anatomical Body Chart"
             className="h-full w-full object-contain opacity-75 dark:opacity-50 pointer-events-none select-none"
           />
 
-          {/* عرض العلامات المسجلة بدقة على الجسم */}
           {marks.map((m) => {
             const markConfig = MARK_TYPES.find((t) => t.label === m.mark_type);
             return (
               <div
                 key={m.id}
                 style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 group z-10"
+                className="absolute z-10"
               >
-                <span
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-lg transition-transform hover:scale-110 ${
-                    markConfig?.color ?? "bg-primary text-primary-foreground"
-                  }`}
+                {/* 
+                  تم تطبيق scale بناءً على قيمة الـ Slider. 
+                  الـ translate(-50%, -50%) بيضمن إن سنتر العلامة هو نفس نقطة الألم بالظبط 
+                */}
+                <div 
+                  className="flex flex-col items-center justify-center transition-transform duration-200"
+                  style={{ transform: `translate(-50%, -50%) scale(${markerSize[0] / 100})` }}
                 >
-                  {m.mark_type}
-                  {canEditClinical && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation(); // منع تفاعل النقر الأساسي للصورة
-                        removeMark.mutate(m.id);
-                      }}
-                      className="ml-1 rounded-full p-0.5 hover:bg-black/20 text-white transition-colors"
-                      aria-label="Delete marker"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </span>
+                  <span
+                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-md transition-transform hover:scale-105 cursor-default ${
+                      markConfig?.color ?? "bg-primary text-primary-foreground"
+                    }`}
+                  >
+                    {m.mark_type}
+                    {canEditClinical && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          removeMark.mutate(m.id);
+                        }}
+                        className="ml-0.5 rounded-full p-0.5 bg-black/20 hover:bg-black/40 text-white transition-colors cursor-pointer"
+                        aria-label="Delete marker"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    )}
+                  </span>
+                  {/* نقطة دقيقة جداً في المركز عشان تبين مكان الكليك الفعلي */}
+                  <div className="absolute w-1 h-1 bg-black rounded-full opacity-30 z-[-1]" />
+                </div>
               </div>
             );
           })}
@@ -182,7 +209,7 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Select a symptom category above, then click anywhere on the anatomical body chart to log it. Click the (x) on any marker to delete it.
+        Select a symptom category above, then click anywhere on the anatomical body chart to log it. Click the (x) on any marker to delete it. Adjust the size slider for pinpoint accuracy.
       </p>
     </div>
   );
