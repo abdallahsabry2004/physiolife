@@ -1,42 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { JWT } from "google-auth-library";
+// استخدام OAuth2Client بدلاً من JWT
+import { OAuth2Client } from "google-auth-library";
 
-// 1. إعداد مصادقة جوجل
-async function getGoogleAuth() {
-  const { JWT: GoogleJWT } = await import("google-auth-library");
+// 1. إعداد مصادقة جوجل باستخدام Refresh Token
+function getGoogleAuth() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
-  const email = process.env.GOOGLE_CLIENT_EMAIL;
-  let rawKey = process.env.GOOGLE_PRIVATE_KEY || "";
-
-  if (!email || !rawKey) {
-    throw new Error("Google Cloud credentials are missing.");
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error("Google OAuth credentials are missing.");
   }
 
-  if (rawKey.startsWith('"') && rawKey.endsWith('"')) {
-    rawKey = rawKey.slice(1, -1);
-  }
-  if (rawKey.startsWith("'") && rawKey.endsWith("'")) {
-    rawKey = rawKey.slice(1, -1);
-  }
+  // استخدام الايميل المباشر كصاحب الملفات
+  const auth = new OAuth2Client(clientId, clientSecret);
+  auth.setCredentials({ refresh_token: refreshToken });
 
-  const privateKey = rawKey.replace(/\\n/g, '\n');
-
-  return new GoogleJWT({
-    email,
-    key: privateKey,
-    scopes: ["https://www.googleapis.com/auth/drive.file"],
-  });
+  return auth;
 }
 
 // دالة مساعدة لإنشاء فولدر
-async function ensureFolder(auth: JWT, name: string, parentId?: string) {
+async function ensureFolder(auth: OAuth2Client, name: string, parentId?: string) {
   const driveApiUrl = "https://www.googleapis.com/drive/v3/files";
-  const token = await auth.getAccessToken();
+  const { token } = await auth.getAccessToken();
 
   const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false ${parentId ? `and '${parentId}' in parents` : ""}`;
   const searchRes = await fetch(`${driveApiUrl}?q=${encodeURIComponent(q)}&fields=files(id)`, {
-    headers: { Authorization: `Bearer ${token.token}` },
+    headers: { Authorization: `Bearer ${token}` },
   });
   
   const searchData = await searchRes.json();
@@ -47,7 +38,7 @@ async function ensureFolder(auth: JWT, name: string, parentId?: string) {
   const createRes = await fetch(driveApiUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token.token}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -84,8 +75,8 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const auth = await getGoogleAuth();
-    const token = await auth.getAccessToken();
+    const auth = getGoogleAuth();
+    const { token } = await auth.getAccessToken();
 
     const rootId = account?.root_folder_id; 
     const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId);
@@ -96,7 +87,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token.token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
         },
@@ -187,11 +178,11 @@ export const deletePatientFile = createServerFn({ method: "POST" })
 
     if (row.drive_file_id) {
       try {
-        const auth = await getGoogleAuth();
-        const token = await auth.getAccessToken();
+        const auth = getGoogleAuth();
+        const { token } = await auth.getAccessToken();
         await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token.token}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
       } catch (e) {
         console.error("Drive delete failed", e);
@@ -207,11 +198,11 @@ export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     try {
-      const auth = await getGoogleAuth();
-      const token = await auth.getAccessToken();
+      const auth = getGoogleAuth();
+      const { token } = await auth.getAccessToken();
 
       const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
-        headers: { Authorization: `Bearer ${token.token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) return { limit: 0, usage: 0 };
