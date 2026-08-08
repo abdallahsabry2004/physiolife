@@ -56,8 +56,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-background">
       <aside
         className={cn(
-          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0 lg:translate-x-0",
+          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0",
+          // بنتحكم في ظهور وإخفاء الشريط في الموبايل
           open ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
+          // السطر ده هو الحل: بنجبر الشريط يظهر دايماً على الكمبيوتر بأولوية أعلى
+          "ltr:lg:translate-x-0 rtl:lg:translate-x-0"
         )}
       >
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
