@@ -1,9 +1,8 @@
-// src/lib/drive.functions.ts
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { JWT } from "google-auth-library";
 
-// 1. إعداد مصادقة جوجل باستخدام الـ Service Account
+// 1. إعداد مصادقة جوجل
 async function getGoogleAuth() {
   const { JWT: GoogleJWT } = await import("google-auth-library");
 
@@ -30,7 +29,7 @@ async function getGoogleAuth() {
   });
 }
 
-// دالة مساعدة لإنشاء فولدر جوة جوجل درايف
+// دالة مساعدة لإنشاء فولدر
 async function ensureFolder(auth: JWT, name: string, parentId?: string) {
   const driveApiUrl = "https://www.googleapis.com/drive/v3/files";
   const token = await auth.getAccessToken();
@@ -62,11 +61,10 @@ async function ensureFolder(auth: JWT, name: string, parentId?: string) {
   return createData.id;
 }
 
-// 2. الدالة الأساسية: طلب رابط الرفع المباشر (Upload URL) من جوجل درايف عبر السيرفر
+// 2. طلب رابط الرفع من جوجل
 export const initiateDriveUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  // تم إضافة origin هنا عشان نستقبله من الواجهة
-  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; origin: string }) => data)
+  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string }) => data)
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
@@ -93,7 +91,6 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
     const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId);
     const categoryFolderId = await ensureFolder(auth, data.category, patientFolderId);
 
-    // فتح جلسة الرفع عن طريق السيرفر لتفادي مشاكل الـ CORS في المتصفح
     const initRes = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,size",
       {
@@ -102,7 +99,6 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token.token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
-          "Origin": data.origin, // الحل السحري: إخبار جوجل بالسماح للمتصفح بالرفع
         },
         body: JSON.stringify({
           name: data.fileName,
@@ -126,7 +122,35 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
     };
   });
 
-// 3. دالة لحفظ بيانات الملف في قاعدة بيانات Supabase
+// 3. رفع الأجزاء (Chunks) للسيرفر
+export const uploadDriveChunk = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { uploadUrl: string; chunkBase64: string; start: number; end: number; totalSize: number }) => data)
+  .handler(async ({ data }) => {
+    const buffer = Buffer.from(data.chunkBase64, "base64");
+    
+    const res = await fetch(data.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Range": `bytes ${data.start}-${data.end}/${data.totalSize}`,
+      },
+      body: buffer,
+    });
+
+    if (res.status === 308) {
+      return { status: 308, data: null }; // الاستمرار في الرفع
+    }
+    
+    if (res.status === 200 || res.status === 201) {
+      const driveData = await res.json();
+      return { status: res.status, data: driveData }; // اكتمال الرفع
+    }
+
+    const errText = await res.text();
+    throw new Error(`Upload failed at Google: ${res.status} ${errText}`);
+  });
+
+// 4. حفظ بيانات الملف في قاعدة بيانات Supabase
 export const saveFileRecord = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string }) => data)
@@ -147,7 +171,7 @@ export const saveFileRecord = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// 4. دالة حذف الملفات
+// 5. حذف الملفات
 export const deletePatientFile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { fileId: string }) => data)
@@ -178,7 +202,7 @@ export const deletePatientFile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// 5. دالة جلب مساحة التخزين (Storage Quota)
+// 6. مساحة التخزين
 export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
@@ -187,14 +211,10 @@ export const getDriveQuota = createServerFn({ method: "GET" })
       const token = await auth.getAccessToken();
 
       const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
-        headers: {
-          Authorization: `Bearer ${token.token}`,
-        },
+        headers: { Authorization: `Bearer ${token.token}` },
       });
 
-      if (!res.ok) {
-        return { limit: 0, usage: 0 };
-      }
+      if (!res.ok) return { limit: 0, usage: 0 };
 
       const data = await res.json();
       return {
