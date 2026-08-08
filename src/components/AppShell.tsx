@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { UserProfileModal } from "@/components/UserProfileModal";
 import {
   LayoutDashboard,
   Users,
