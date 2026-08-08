@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
+import { PatientExercises } from "@/components/PatientExercises";
+import { PatientMeasurements } from "@/components/PatientMeasurements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -180,8 +182,11 @@ function PatientDetail() {
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="body">Body chart</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
+          <TabsTrigger value="measures">Measurements</TabsTrigger>
+          <TabsTrigger value="program">Home program</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="history" className="mt-6">
           <ClinicalModule
@@ -377,9 +382,18 @@ function PatientDetail() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="measures" className="mt-6">
+          <PatientMeasurements patientId={id} />
+        </TabsContent>
+
+        <TabsContent value="program" className="mt-6">
+          <PatientExercises patientId={id} />
+        </TabsContent>
+
         <TabsContent value="files" className="mt-6">
           <PatientFiles patientId={id} />
         </TabsContent>
+
 
       </Tabs>
     </div>
