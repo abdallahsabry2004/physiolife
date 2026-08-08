@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -54,6 +54,7 @@ function ExercisesPage() {
   const [form, setForm] = useState(empty);
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: exercises = [] } = useQuery({
     queryKey: ["exercises"],
@@ -67,21 +68,69 @@ function ExercisesPage() {
     },
   });
 
-  const create = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("exercises")
-        .insert({ ...form, created_by: user?.id ?? null });
-      if (error) throw error;
+      if (editingId) {
+        // تحديث تمرين موجود
+        const { error } = await supabase
+          .from("exercises")
+          .update({ ...form })
+          .eq("id", editingId);
+        if (error) throw error;
+      } else {
+        // إضافة تمرين جديد
+        const { error } = await supabase
+          .from("exercises")
+          .insert({ ...form, created_by: user?.id ?? null });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Exercise added");
+      toast.success(editingId ? "Exercise updated" : "Exercise added");
       setForm(empty);
+      setEditingId(null);
       setOpen(false);
       void qc.invalidateQueries({ queryKey: ["exercises"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("exercises").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Exercise deleted");
+      void qc.invalidateQueries({ queryKey: ["exercises"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openEdit = (exercise: any) => {
+    setForm({
+      name: exercise.name || "",
+      category: exercise.category || "",
+      target_muscle: exercise.target_muscle || "",
+      difficulty: exercise.difficulty || "",
+      sets: exercise.sets || "",
+      repetitions: exercise.repetitions || "",
+      frequency: exercise.frequency || "",
+      description: exercise.description || "",
+      instructions: exercise.instructions || "",
+      video_url: exercise.video_url || "",
+    });
+    setEditingId(exercise.id);
+    setOpen(true);
+  };
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setForm(empty);
+      setEditingId(null);
+    }
+  };
 
   const filtered = exercises.filter(
     (e) =>
@@ -100,7 +149,7 @@ function ExercisesPage() {
           </p>
         </div>
         {canEditClinical && (
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" /> Add exercise
@@ -108,13 +157,13 @@ function ExercisesPage() {
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>New exercise</DialogTitle>
+                <DialogTitle>{editingId ? "Edit exercise" : "New exercise"}</DialogTitle>
               </DialogHeader>
               <form
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  create.mutate();
+                  saveMutation.mutate();
                 }}
               >
                 <div className="space-y-2">
@@ -139,7 +188,7 @@ function ExercisesPage() {
                     <div key={key} className="space-y-2">
                       <Label>{label}</Label>
                       <Input
-                        value={form[key]}
+                        value={form[key as keyof typeof form]}
                         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                       />
                     </div>
@@ -160,8 +209,8 @@ function ExercisesPage() {
                     onChange={(e) => setForm({ ...form, video_url: e.target.value })}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={create.isPending}>
-                  Save exercise
+                <Button type="submit" className="w-full" disabled={saveMutation.isPending}>
+                  {saveMutation.isPending ? "Saving..." : "Save exercise"}
                 </Button>
               </form>
             </DialogContent>
@@ -182,8 +231,26 @@ function ExercisesPage() {
         )}
         {filtered.map((e) => (
           <Card key={e.id}>
-            <CardContent className="space-y-2 pt-6">
-              <div className="flex items-start justify-between gap-2">
+            <CardContent className="space-y-2 pt-6 relative">
+              {canEditClinical && (
+                <div className="absolute top-4 right-4 flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this exercise?")) {
+                        deleteMutation.mutate(e.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              )}
+              <div className="flex items-start justify-between gap-2 pr-16">
                 <p className="font-semibold">{e.name}</p>
                 {e.difficulty && <Badge variant="secondary">{e.difficulty}</Badge>}
               </div>
