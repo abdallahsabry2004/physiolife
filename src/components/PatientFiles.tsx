@@ -1,4 +1,3 @@
-// src/components/PatientFiles.tsx
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -6,7 +5,7 @@ import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { deletePatientFile, initiateDriveUpload, saveFileRecord } from "@/lib/drive.functions";
+import { deletePatientFile, initiateDriveUpload, uploadDriveChunk, saveFileRecord } from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +41,18 @@ const formatBytes = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
+function toBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result);
+      resolve(res.slice(res.indexOf(",") + 1));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function PatientFiles({ patientId }: { patientId: string }) {
   const { canEditClinical } = useAuth();
   const qc = useQueryClient();
@@ -57,6 +68,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   } | null>(null);
 
   const initUpload = useServerFn(initiateDriveUpload);
+  const sendChunk = useServerFn(uploadDriveChunk);
   const saveRecord = useServerFn(saveFileRecord);
   const removeFile = useServerFn(deletePatientFile);
 
@@ -75,70 +87,75 @@ export function PatientFiles({ patientId }: { patientId: string }) {
 
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
+      const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB لكل قطعة لتخطي حدود Vercel
+
       for (const file of fileList) {
-        // 1. السيرفر بيكلم جوجل ويجيب الرابط المؤقت للرفع المباشر (مع إرسال مسار الموقع الحالي)
+        if (file.size === 0) throw new Error(`File ${file.name} is empty.`);
+
+        // 1. طلب الرابط المؤقت
         const { uploadUrl, storageAccountId } = await initUpload({
           data: { 
             patientId, 
             category,
             fileName: file.name,
             mimeType: file.type || "application/octet-stream",
-            origin: window.location.origin // تم إضافة السطر ده
           },
         });
 
-        if (!uploadUrl) throw new Error("Failed to get upload URL from server.");
+        if (!uploadUrl) throw new Error("Failed to initialize upload.");
 
-        // 2. المتصفح بيرفع الملف الخام للرابط مباشرة باستخدام XMLHttpRequest لتتبع التقدم
-        const driveData = await new Promise<any>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", uploadUrl); // يتم الرفع بطريقة الـ PUT
+        let start = 0;
+        let driveData = null;
 
-          let lastTime = Date.now();
-          let lastLoaded = 0;
+        // 2. الرفع المجزأ للقطع
+        while (start < file.size) {
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
+          const base64 = await toBase64(chunk);
+          const startTime = Date.now();
+
+          const chunkRes = await sendChunk({
+            data: {
+              uploadUrl,
+              chunkBase64: base64,
+              start,
+              end: end - 1,
+              totalSize: file.size,
+            },
+          });
+
+          // حساب السرعة وتحديث شريط التقدم
+          const timeDiff = (Date.now() - startTime) / 1000;
           let currentSpeed = "0 KB/s";
-
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const now = Date.now();
-              const timeDiff = (now - lastTime) / 1000;
-
-              if (timeDiff > 0.5) {
-                const speedBps = (event.loaded - lastLoaded) / timeDiff;
-                if (speedBps > 1024 * 1024) {
-                  currentSpeed = `${(speedBps / (1024 * 1024)).toFixed(2)} MB/s`;
-                } else {
-                  currentSpeed = `${(speedBps / 1024).toFixed(2)} KB/s`;
-                }
-                lastTime = now;
-                lastLoaded = event.loaded;
-              }
-
-              setUploadStats({
-                progress: Math.round((event.loaded / event.total) * 100),
-                uploadedBytes: event.loaded,
-                totalBytes: event.total,
-                speed: currentSpeed,
-                fileName: file.name,
-              });
-            }
-          };
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve(JSON.parse(xhr.responseText));
+          if (timeDiff > 0) {
+            const speedBps = chunk.size / timeDiff;
+            if (speedBps > 1024 * 1024) {
+              currentSpeed = `${(speedBps / (1024 * 1024)).toFixed(2)} MB/s`;
             } else {
-              reject(new Error(`Upload failed: ${xhr.statusText}`));
+              currentSpeed = `${(speedBps / 1024).toFixed(2)} KB/s`;
             }
-          };
+          }
 
-          xhr.onerror = () => reject(new Error("Network error during upload."));
+          setUploadStats({
+            progress: Math.round((end / file.size) * 100),
+            uploadedBytes: end,
+            totalBytes: file.size,
+            speed: currentSpeed,
+            fileName: file.name,
+          });
 
-          // يتم إرسال الملف مباشرة
-          xhr.send(file);
-        });
+          // لو الرفع اكتمل
+          if (chunkRes.status === 200 || chunkRes.status === 201) {
+            driveData = chunkRes.data;
+            break;
+          }
 
-        // 3. حفظ بيانات الملف في قاعدة البيانات
+          start = end;
+        }
+
+        if (!driveData) throw new Error("Upload did not complete properly.");
+
+        // 3. حفظ البيانات في قاعدة البيانات
         await saveRecord({
           data: {
             patientId,
@@ -250,7 +267,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             )}
 
             <p className="text-xs text-muted-foreground">
-              Files upload automatically and directly to the clinic Google Drive without size limits.
+              Files upload automatically and securely to the clinic Google Drive.
             </p>
           </CardContent>
         </Card>
