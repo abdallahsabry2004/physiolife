@@ -385,6 +385,7 @@ function PatientDetail() {
           <TabsTrigger value="body">Body chart</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
           <TabsTrigger value="measures">Measurements</TabsTrigger>
+          <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
           <TabsTrigger value="program">Home program</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
@@ -491,6 +492,10 @@ function PatientDetail() {
 
         <TabsContent value="measures" className="mt-6">
           <PatientMeasurements patientId={id} />
+        </TabsContent>
+
+        <TabsContent value="questionnaires" className="mt-6">
+          <PatientAssessments patientId={id} />
         </TabsContent>
 
         <TabsContent value="program" className="mt-6">
