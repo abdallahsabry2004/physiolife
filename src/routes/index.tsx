@@ -70,7 +70,7 @@ function LoginPage() {
 
   const verifySignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length < 6) return toast.error("Please enter the complete 6-digit OTP.");
+    if (otp.length < 6) { toast.error("Please enter the complete 6-digit OTP."); return; }
     
     setBusy(true);
     try {
@@ -107,8 +107,8 @@ function LoginPage() {
   // دالة تأكيد كود كلمة المرور وتحديثها
   const verifyAndReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length < 6) return toast.error("Please enter the complete 6-digit OTP.");
-    if (password.length < 6) return toast.error("Password must be at least 6 characters.");
+    if (otp.length < 6) { toast.error("Please enter the complete 6-digit OTP."); return; }
+    if (password.length < 6) { toast.error("Password must be at least 6 characters."); return; }
     
     setBusy(true);
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -119,14 +119,14 @@ function LoginPage() {
 
     if (verifyError) {
       setBusy(false);
-      return toast.error(verifyError.message);
+      { toast.error(verifyError.message); return; }
     }
 
     const { error: updateError } = await supabase.auth.updateUser({ password });
     setBusy(false);
 
     if (updateError) {
-      return toast.error(updateError.message);
+      { toast.error(updateError.message); return; }
     }
 
     toast.success("Password updated successfully! You can now sign in.");
