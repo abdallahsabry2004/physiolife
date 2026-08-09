@@ -5,7 +5,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; // تم الاستدعاء هنا
+import { logActivityAsync } from "@/lib/logger"; // إضافة دالة المراقبة
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +50,7 @@ const empty = {
 };
 
 function ExercisesPage() {
-  const { canEditClinical, user, fullName } = useAuth(); // جلب اسم المستخدم
+  const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
   const [form, setForm] = useState(empty);
   const [open, setOpen] = useState(false);
@@ -72,14 +72,17 @@ function ExercisesPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (editingId) {
-        // تحديث تمرين موجود مع التوثيق
-        const oldExercise = exercises.find((e) => e.id === editingId);
+        // جلب البيانات القديمة للتوثيق
+        const oldExercise = exercises.find(e => e.id === editingId);
+        
+        // تحديث تمرين موجود
         const { error } = await supabase
           .from("exercises")
           .update({ ...form })
           .eq("id", editingId);
         if (error) throw error;
-
+        
+        // توثيق التعديل
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
@@ -87,14 +90,14 @@ function ExercisesPage() {
           entity: `Exercise Library (${form.name})`,
           details: { old_data: oldExercise, new_data: form }
         });
-
       } else {
-        // إضافة تمرين جديد مع التوثيق
+        // إضافة تمرين جديد
         const { error } = await supabase
           .from("exercises")
           .insert({ ...form, created_by: user?.id ?? null });
         if (error) throw error;
-
+        
+        // توثيق الإضافة
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
@@ -115,17 +118,16 @@ function ExercisesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const oldExercise = exercises.find((e) => e.id === id);
+      const oldEx = exercises.find(e => e.id === id);
       const { error } = await supabase.from("exercises").delete().eq("id", id);
       if (error) throw error;
-
+      
       // توثيق الحذف
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
         action: "DELETE_EXERCISE",
-        entity: `Exercise Library (${oldExercise?.name || "Unknown"})`,
-        details: { deleted_data: oldExercise }
+        entity: `Exercise Library (${oldEx?.name || "Unknown"})`,
       });
     },
     onSuccess: () => {
