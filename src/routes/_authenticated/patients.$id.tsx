@@ -18,6 +18,7 @@ import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
 import { PatientMeasurements } from "@/components/PatientMeasurements";
+import { PatientAssessments } from "@/components/PatientAssessments";
 import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
