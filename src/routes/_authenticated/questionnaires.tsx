@@ -47,8 +47,9 @@ export const Route = createFileRoute("/_authenticated/questionnaires")({
   component: QuestionnairesPage,
 });
 
-type OptionDraft = { label: string; label_ar: string; score: string };
-type QuestionDraft = { text: string; text_ar: string; options: OptionDraft[] };
+// أضفنا id اختياري لتتبع العناصر الموجودة في الداتا بيز لتعديلها بأمان
+type OptionDraft = { id?: string; label: string; label_ar: string; score: string };
+type QuestionDraft = { id?: string; text: string; text_ar: string; options: OptionDraft[] };
 
 const emptyOption = (): OptionDraft => ({ label: "", label_ar: "", score: "0" });
 const emptyQuestion = (): QuestionDraft => ({
@@ -147,14 +148,17 @@ function QuestionnairesPage() {
     const qs = [...(data.questionnaire_questions ?? [])].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
+    // جلب المعرفات القديمة (ids) لربطها في الفورم
     setQuestions(
       qs.length
         ? qs.map((q) => ({
+            id: q.id,
             text: q.text,
             text_ar: q.text_ar ?? "",
             options: [...(q.questionnaire_options ?? [])]
               .sort((a, b) => a.sort_order - b.sort_order)
               .map((o) => ({
+                id: o.id,
                 label: o.label,
                 label_ar: o.label_ar ?? "",
                 score: String(o.score),
@@ -192,17 +196,38 @@ function QuestionnairesPage() {
       };
 
       let questionnaireId = editingId;
+      
+      // التعديل الآمن الذي يحافظ على البيانات القديمة بدلاً من حذفها
       if (editingId) {
         const { error } = await supabase
           .from("questionnaires")
           .update(payload)
           .eq("id", editingId);
         if (error) throw error;
-        const { error: delErr } = await supabase
+
+        // قراءة الأسئلة الموجودة لمسح ما تم حذفه من الواجهة فقط
+        const { data: existingQs } = await supabase
           .from("questionnaire_questions")
-          .delete()
+          .select("id, questionnaire_options(id)")
           .eq("questionnaire_id", editingId);
-        if (delErr) throw delErr;
+
+        if (existingQs) {
+          const currentQuestionIds = cleanQuestions.map((q) => q.id).filter(Boolean);
+          const currentOptionIds = cleanQuestions.flatMap((q) => q.options.map((o) => o.id)).filter(Boolean);
+
+          const dbQIds = existingQs.map((q) => q.id);
+          const dbOIds = existingQs.flatMap((q) => q.questionnaire_options.map((o) => o.id));
+
+          const oIdsToDelete = dbOIds.filter((id) => !currentOptionIds.includes(id));
+          const qIdsToDelete = dbQIds.filter((id) => !currentQuestionIds.includes(id));
+
+          if (oIdsToDelete.length > 0) {
+            await supabase.from("questionnaire_options").delete().in("id", oIdsToDelete);
+          }
+          if (qIdsToDelete.length > 0) {
+            await supabase.from("questionnaire_questions").delete().in("id", qIdsToDelete);
+          }
+        }
       } else {
         const { data, error } = await supabase
           .from("questionnaires")
@@ -213,28 +238,58 @@ function QuestionnairesPage() {
         questionnaireId = data.id;
       }
 
+      // عمل Update للقديم و Insert للجديد
       for (const [qi, q] of cleanQuestions.entries()) {
-        const { data: qRow, error: qErr } = await supabase
-          .from("questionnaire_questions")
-          .insert({
-            questionnaire_id: questionnaireId!,
-            text: q.text.trim(),
-            text_ar: q.text_ar.trim() || null,
-            sort_order: qi,
-          })
-          .select("id")
-          .single();
-        if (qErr) throw qErr;
-        const { error: oErr } = await supabase.from("questionnaire_options").insert(
-          q.options.map((o, oi) => ({
-            question_id: qRow.id,
-            label: o.label.trim(),
-            label_ar: o.label_ar.trim() || null,
-            score: Number(o.score || 0),
-            sort_order: oi,
-          })),
-        );
-        if (oErr) throw oErr;
+        let qRowId = q.id;
+
+        if (qRowId) {
+          const { error: qErr } = await supabase
+            .from("questionnaire_questions")
+            .update({
+              text: q.text.trim(),
+              text_ar: q.text_ar.trim() || null,
+              sort_order: qi,
+            })
+            .eq("id", qRowId);
+          if (qErr) throw qErr;
+        } else {
+          const { data: qRow, error: qErr } = await supabase
+            .from("questionnaire_questions")
+            .insert({
+              questionnaire_id: questionnaireId!,
+              text: q.text.trim(),
+              text_ar: q.text_ar.trim() || null,
+              sort_order: qi,
+            })
+            .select("id")
+            .single();
+          if (qErr) throw qErr;
+          qRowId = qRow.id;
+        }
+
+        for (const [oi, o] of q.options.entries()) {
+          if (o.id) {
+            const { error: oErr } = await supabase
+              .from("questionnaire_options")
+              .update({
+                label: o.label.trim(),
+                label_ar: o.label_ar.trim() || null,
+                score: Number(o.score || 0),
+                sort_order: oi,
+              })
+              .eq("id", o.id);
+            if (oErr) throw oErr;
+          } else {
+            const { error: oErr } = await supabase.from("questionnaire_options").insert({
+              question_id: qRowId!,
+              label: o.label.trim(),
+              label_ar: o.label_ar.trim() || null,
+              score: Number(o.score || 0),
+              sort_order: oi,
+            });
+            if (oErr) throw oErr;
+          }
+        }
       }
 
       logActivityAsync({
