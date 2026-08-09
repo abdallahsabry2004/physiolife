@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { getDriveQuota } from "@/lib/drive.functions";
+// استيراد رابط الشيت من ملف المراقبة
+import { GOOGLE_SHEETS_WEBHOOK_URL } from "@/lib/logger"; 
 import {
   Select,
   SelectContent,
@@ -90,16 +92,17 @@ function AdminPage() {
     },
   });
 
+  // قراءة السجلات من شيت جوجل مباشرة بدلاً من قاعدة بيانات Supabase
   const { data: logs = [] } = useQuery({
     queryKey: ["audit_logs"],
-    enabled: isAdmin,
+    enabled: isAdmin && !!GOOGLE_SHEETS_WEBHOOK_URL,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("id, action, entity, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100); // زيادة العدد ليكون البحث أكثر فعالية
-      if (error) throw error;
+      if (GOOGLE_SHEETS_WEBHOOK_URL === "https://script.google.com/macros/s/AKfycbyxxUpADjcTvmW0h6Zc-YrqBFAn9_K9ZMJGMJCSxcCu6iDFet-lwdN3ggCZ8zZOZp9p/exec" || !GOOGLE_SHEETS_WEBHOOK_URL) {
+         return [];
+      }
+      const res = await fetch(GOOGLE_SHEETS_WEBHOOK_URL);
+      if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
+      const data = await res.json();
       return data;
     },
   });
@@ -160,12 +163,13 @@ function AdminPage() {
   });
 
   // تصفية السجلات بناءً على شريط البحث
-  const filteredLogs = logs.filter((l) => {
+  const filteredLogs = logs.filter((l: any) => {
     const searchLower = logSearch.toLowerCase();
-    const dateStr = new Date(l.created_at).toLocaleString().toLowerCase();
+    const dateStr = l.created_at ? new Date(l.created_at).toLocaleString().toLowerCase() : "";
     return (
-      l.action.toLowerCase().includes(searchLower) ||
+      (l.action || "").toLowerCase().includes(searchLower) ||
       (l.entity?.toLowerCase() || "").includes(searchLower) ||
+      (l.user?.toLowerCase() || "").includes(searchLower) ||
       dateStr.includes(searchLower)
     );
   });
@@ -378,11 +382,17 @@ function AdminPage() {
           {filteredLogs.length === 0 && (
             <p className="text-sm text-muted-foreground print:text-black">No recorded activity matches your search.</p>
           )}
-          {filteredLogs.map((l) => (
-            <div key={l.id} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
-              <span className="font-medium print:text-black">{l.action}</span>
-              <span className="text-muted-foreground print:text-black">
-                {l.entity} · {new Date(l.created_at).toLocaleString('en-GB')}
+          {filteredLogs.map((l: any, idx: number) => (
+            <div key={idx} className="flex flex-col sm:flex-row justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
+              <div className="flex flex-col">
+                <span className="font-medium print:text-black text-primary">{l.action}</span>
+                <span className="text-muted-foreground print:text-black text-xs mt-1">
+                  <span className="font-bold text-gray-700 mr-1">User:</span>{l.user || "System"}
+                </span>
+              </div>
+              <span className="text-muted-foreground print:text-black mt-2 sm:mt-0 text-right">
+                <div className="font-medium">{l.entity}</div>
+                <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
               </span>
             </div>
           ))}
