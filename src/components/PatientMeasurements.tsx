@@ -17,18 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const SUGGESTED_METRICS = [
-  "Knee flexion ROM",
-  "Knee extension ROM",
-  "Shoulder abduction ROM",
-  "Quadriceps MMT",
-  "Grip strength",
-  "Pain (VAS)",
-  "Limb girth",
-  "Walking distance",
-  "Balance (seconds)",
-];
-
 export function PatientMeasurements({ patientId }: { patientId: string }) {
   const { user, canEditClinical } = useAuth();
   const qc = useQueryClient();
@@ -38,6 +26,20 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
   const [unit, setUnit] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [selected, setSelected] = useState<string | null>(null);
+
+  // جلب الاقتراحات من لوحة الإدارة
+  const { data: suggestedMetrics = [] } = useQuery({
+    queryKey: ["clinical_fields", "measurements"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinical_fields")
+        .select("label")
+        .eq("module", "measurements")
+        .order("sort_order");
+      if (error) throw error;
+      return data.map((d) => d.label);
+    },
+  });
 
   const { data: rows = [] } = useQuery({
     queryKey: ["measurements", patientId],
@@ -133,8 +135,9 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
                 </Button>
               </div>
             </div>
+            {/* عرض الاقتراحات المجلوبة من قاعدة البيانات */}
             <div className="flex flex-wrap gap-2">
-              {SUGGESTED_METRICS.map((m) => (
+              {suggestedMetrics.map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -144,6 +147,9 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
                   {m}
                 </button>
               ))}
+              {suggestedMetrics.length === 0 && (
+                <p className="text-xs text-muted-foreground">Add suggestions from the Administration panel.</p>
+              )}
             </div>
           </CardContent>
         </Card>
