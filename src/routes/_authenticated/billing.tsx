@@ -50,8 +50,8 @@ function BillingPage() {
   const [payModal, setPayModal] = useState({ open: false, invoice: null as any, amountToPay: "", remaining: 0, type: "full" as "full" | "partial" });
   const [deleteInvoiceModal, setDeleteInvoiceModal] = useState({ open: false, invoice: null as any, password: "" });
   
-  // حالة بيانات الطباعة
-  const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment', data: any } | null>(null);
+  // تحديث حالة الطباعة لتشمل (فاتورة، إيصال، كشف حساب كامل)
+  const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
 
   const [form, setForm] = useState({
@@ -89,7 +89,6 @@ function BillingPage() {
   const { data: payments = [] } = useQuery({
     queryKey: ["payments"],
     queryFn: async () => {
-      // جلب المدفوعات مع تفاصيل الفاتورة المرتبطة بها للطباعة
       const { data, error } = await supabase
         .from("payments")
         .select("id, amount, method, paid_on, invoice_id, patients(full_name, code), invoices(*)")
@@ -262,14 +261,42 @@ function BillingPage() {
     }, 100);
   };
 
-  // إعداد بيانات أرشيف المرضى
+  // دالة لتجهيز وطباعة كشف الحساب الكامل للمريض
+  const handlePrintHistory = () => {
+    const patient = patients.find(p => p.id === selectedHistoryPatient);
+    if (!patient) return;
+
+    const historyInvoicesList = invoices.filter(i => i.patient_id === selectedHistoryPatient);
+    const historyPaymentsList = payments.filter(p => p.patient_id === selectedHistoryPatient);
+
+    const totalBilled = historyInvoicesList.reduce((sum, inv) => sum + Number(inv.total), 0);
+    const totalPaid = historyPaymentsList.reduce((sum, pay) => sum + Number(pay.amount), 0);
+    const totalRemaining = totalBilled - totalPaid;
+
+    setPrintData({
+      type: 'history',
+      data: {
+        patient,
+        invoices: historyInvoicesList,
+        payments: historyPaymentsList,
+        totalBilled,
+        totalPaid,
+        totalRemaining
+      }
+    });
+
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
+
   const patientsWithBilling = useMemo(() => {
     const uniqueIds = Array.from(new Set([...invoices.map(i => i.patient_id), ...payments.map(p => p.patient_id)]));
     return patients.filter(p => uniqueIds.includes(p.id));
   }, [invoices, payments, patients]);
 
-  const historyInvoices = selectedHistoryPatient === "all" ? invoices : invoices.filter(i => i.patient_id === selectedHistoryPatient);
-  const historyPayments = selectedHistoryPatient === "all" ? payments : payments.filter(p => p.patient_id === selectedHistoryPatient);
+  const historyInvoices = selectedHistoryPatient === "all" ? [] : invoices.filter(i => i.patient_id === selectedHistoryPatient);
+  const historyPayments = selectedHistoryPatient === "all" ? [] : payments.filter(p => p.patient_id === selectedHistoryPatient);
 
   const totalOutstanding = invoices
     .filter((i) => i.status !== "paid")
@@ -277,7 +304,7 @@ function BillingPage() {
 
   return (
     <div className="space-y-6">
-      {/* ----------------- قالب الطباعة ----------------- */}
+      {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
         <div className="hidden print:block absolute inset-0 bg-white p-8 z-50 min-h-screen">
           <div className="border-b-2 border-primary pb-6 mb-6">
@@ -291,10 +318,14 @@ function BillingPage() {
               </div>
               <div className="text-right">
                 <h3 className="text-2xl font-bold text-gray-800 tracking-wider">
-                  {printData.type === 'invoice' ? 'INVOICE STATEMENT' : 'PAYMENT RECEIPT'}
+                  {printData.type === 'invoice' && 'INVOICE STATEMENT'}
+                  {printData.type === 'payment' && 'PAYMENT RECEIPT'}
+                  {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
                 </h3>
-                <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
-                <p className="text-gray-500">Date: {new Date(printData.data.created_at).toLocaleDateString('en-GB')}</p>
+                {printData.type !== 'history' && (
+                  <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
+                )}
+                <p className="text-gray-500">Date: {new Date().toLocaleDateString('en-GB')}</p>
               </div>
             </div>
           </div>
@@ -303,11 +334,20 @@ function BillingPage() {
             <div className="flex justify-between border-b pb-4">
               <div>
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
-                <p className="text-xl font-bold mt-1">{(printData.data.patients as any)?.full_name}</p>
-                <p className="text-sm text-gray-600">ID: {(printData.data.patients as any)?.code}</p>
+                <p className="text-xl font-bold mt-1">
+                  {printData.type === 'history' 
+                    ? printData.data.patient.full_name 
+                    : (printData.data.patients as any)?.full_name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  ID: {printData.type === 'history' 
+                        ? printData.data.patient.code 
+                        : (printData.data.patients as any)?.code}
+                </p>
               </div>
             </div>
 
+            {/* قالب طباعة الفاتورة الواحدة */}
             {printData.type === 'invoice' && (
               <div className="space-y-4">
                 <div className="bg-gray-50 p-6 rounded-lg border">
@@ -337,6 +377,7 @@ function BillingPage() {
               </div>
             )}
 
+            {/* قالب طباعة الدفعة الواحدة */}
             {printData.type === 'payment' && (
               <div className="space-y-4">
                 <div className="bg-gray-50 p-6 rounded-lg border mb-4">
@@ -358,6 +399,72 @@ function BillingPage() {
                     <p><span className="text-gray-500">Invoice Total:</span> EGP {Number(printData.data.invoices.total).toLocaleString()}</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* قالب طباعة السجل المالي الكامل للمريض */}
+            {printData.type === 'history' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 border rounded-lg text-center bg-gray-50">
+                    <p className="text-sm text-gray-500">Total Billed</p>
+                    <p className="text-xl font-bold text-primary">EGP {printData.data.totalBilled.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 border rounded-lg text-center bg-green-50">
+                    <p className="text-sm text-green-600">Total Paid</p>
+                    <p className="text-xl font-bold text-green-700">EGP {printData.data.totalPaid.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 border rounded-lg text-center bg-red-50">
+                    <p className="text-sm text-red-600">Outstanding Balance</p>
+                    <p className="text-xl font-bold text-red-700">EGP {printData.data.totalRemaining.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-lg border-b pb-2 mb-4">Invoices Summary</h4>
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="border-b bg-gray-100">
+                        <th className="p-2">Date</th>
+                        <th className="p-2">Description</th>
+                        <th className="p-2">Total</th>
+                        <th className="p-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printData.data.invoices.map((i: any) => (
+                        <tr key={i.id} className="border-b">
+                          <td className="p-2">{i.issue_date}</td>
+                          <td className="p-2">{i.description || "General"}</td>
+                          <td className="p-2">EGP {i.total}</td>
+                          <td className="p-2 capitalize">{i.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-lg border-b pb-2 mb-4">Payments Summary</h4>
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="border-b bg-gray-100">
+                        <th className="p-2">Date</th>
+                        <th className="p-2">Method</th>
+                        <th className="p-2">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printData.data.payments.map((p: any) => (
+                        <tr key={p.id} className="border-b">
+                          <td className="p-2">{p.paid_on}</td>
+                          <td className="p-2 uppercase">{p.method}</td>
+                          <td className="p-2 font-bold">EGP {p.amount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -467,7 +574,6 @@ function BillingPage() {
           )}
         </header>
 
-        {/* نافذة استلام الدفع (الدفع الجزئي أو الكلي) */}
         <Dialog open={payModal.open} onOpenChange={(open) => !open && setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -531,7 +637,6 @@ function BillingPage() {
           </DialogContent>
         </Dialog>
 
-        {/* نافذة الحذف الآمن للفواتير بالكامل */}
         <Dialog open={deleteInvoiceModal.open} onOpenChange={(open) => !open && setDeleteInvoiceModal({ open: false, invoice: null, password: "" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -687,18 +792,25 @@ function BillingPage() {
                 <p className="text-sm text-muted-foreground">Select a patient to view their complete billing history.</p>
               </CardHeader>
               <CardContent>
-                <div className="max-w-md mb-6">
-                  <Select value={selectedHistoryPatient} onValueChange={setSelectedHistoryPatient}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select patient" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">-- Select a Patient --</SelectItem>
-                      {patientsWithBilling.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.full_name} ({p.code})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                  <div className="max-w-md w-full">
+                    <Select value={selectedHistoryPatient} onValueChange={setSelectedHistoryPatient}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select patient" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">-- Select a Patient --</SelectItem>
+                        {patientsWithBilling.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.full_name} ({p.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedHistoryPatient !== "all" && (
+                    <Button onClick={handlePrintHistory} variant="outline" className="shrink-0">
+                      <Printer className="mr-2 h-4 w-4" /> Print Full History
+                    </Button>
+                  )}
                 </div>
 
                 {selectedHistoryPatient !== "all" ? (
@@ -711,12 +823,14 @@ function BillingPage() {
                             const { paidAmount, remaining } = getInvoiceStats(i);
                             const isPaid = i.status === "paid" || remaining <= 0;
                             return (
-                              <div key={i.id} className="flex justify-between items-center border p-2 rounded text-sm">
+                              <div key={i.id} className="flex justify-between items-center border p-3 rounded text-sm bg-card">
                                 <div>
                                   <p className="font-medium">{i.description || "General"} · {i.issue_date}</p>
-                                  <p className="text-xs text-muted-foreground">Total: EGP {i.total} | Remaining: EGP {remaining}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">Total: EGP {i.total} | Remaining: EGP {remaining}</p>
                                 </div>
-                                <Badge variant={isPaid ? "default" : "secondary"}>{isPaid ? "Paid" : "Unpaid"}</Badge>
+                                <div className="flex items-center gap-3">
+                                  <Badge variant={isPaid ? "default" : "secondary"}>{isPaid ? "Paid" : "Unpaid"}</Badge>
+                                </div>
                               </div>
                             )
                           })}
@@ -728,10 +842,10 @@ function BillingPage() {
                       {historyPayments.length === 0 ? <p className="text-sm text-muted-foreground">No payments.</p> : (
                         <div className="space-y-2">
                           {historyPayments.map((p) => (
-                            <div key={p.id} className="flex justify-between items-center border p-2 rounded text-sm bg-secondary/10">
+                            <div key={p.id} className="flex justify-between items-center border p-3 rounded text-sm bg-secondary/10">
                               <div>
                                 <p className="font-medium">Paid on {p.paid_on}</p>
-                                <p className="text-xs text-muted-foreground">Method: {p.method}</p>
+                                <p className="text-xs text-muted-foreground mt-1">Method: {p.method}</p>
                               </div>
                               <span className="font-bold text-primary">EGP {p.amount}</span>
                             </div>
