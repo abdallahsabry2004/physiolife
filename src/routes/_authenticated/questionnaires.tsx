@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, X, ClipboardList } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ClipboardList, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -47,7 +47,6 @@ export const Route = createFileRoute("/_authenticated/questionnaires")({
   component: QuestionnairesPage,
 });
 
-// أضفنا id اختياري لتتبع العناصر الموجودة في الداتا بيز لتعديلها بأمان
 type OptionDraft = { id?: string; label: string; label_ar: string; score: string };
 type QuestionDraft = { id?: string; text: string; text_ar: string; options: OptionDraft[] };
 
@@ -73,9 +72,16 @@ const emptyMeta = {
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
+// دالة موحدة تُستخدم في مكانين لتنظيف الأسئلة والخيارات الفارغة
+const getCleanQuestions = (qs: QuestionDraft[]) =>
+  qs
+    .map((q) => ({ ...q, options: q.options.filter((o) => o.label.trim() !== "") }))
+    .filter((q) => q.text.trim() !== "" && q.options.length > 0);
+
 function QuestionnairesPage() {
   const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
+  
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [meta, setMeta] = useState(emptyMeta);
@@ -83,6 +89,11 @@ function QuestionnairesPage() {
   const [bands, setBands] = useState<InterpretationBand[]>([{ min: 0, max: 20, label: "" }]);
   const [term, setTerm] = useState("");
   const [viewId, setViewId] = useState<string | null>(null);
+
+  // حالات التحكم في عملية الفحص والتحذير والحذف
+  const [isChecking, setIsChecking] = useState(false);
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<{qIds: string[]; oIds: string[]}>({qIds: [], oIds: []});
 
   const { data: list = [] } = useQuery({
     queryKey: ["questionnaires"],
@@ -148,7 +159,6 @@ function QuestionnairesPage() {
     const qs = [...(data.questionnaire_questions ?? [])].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
-    // جلب المعرفات القديمة (ids) لربطها في الفورم
     setQuestions(
       qs.length
         ? qs.map((q) => ({
@@ -170,16 +180,8 @@ function QuestionnairesPage() {
   };
 
   const save = useMutation({
-    mutationFn: async () => {
-      if (!meta.name.trim()) throw new Error("Give the questionnaire a name");
-      const cleanQuestions = questions
-        .map((q) => ({
-          ...q,
-          options: q.options.filter((o) => o.label.trim() !== ""),
-        }))
-        .filter((q) => q.text.trim() !== "" && q.options.length > 0);
-      if (cleanQuestions.length === 0)
-        throw new Error("Add at least one question with answer options");
+    mutationFn: async (deleteIds?: { qIds: string[]; oIds: string[] }) => {
+      const cleanQuestions = getCleanQuestions(questions);
 
       const payload = {
         name: meta.name.trim(),
@@ -197,7 +199,6 @@ function QuestionnairesPage() {
 
       let questionnaireId = editingId;
       
-      // التعديل الآمن الذي يحافظ على البيانات القديمة بدلاً من حذفها
       if (editingId) {
         const { error } = await supabase
           .from("questionnaires")
@@ -205,28 +206,20 @@ function QuestionnairesPage() {
           .eq("id", editingId);
         if (error) throw error;
 
-        // قراءة الأسئلة الموجودة لمسح ما تم حذفه من الواجهة فقط
-        const { data: existingQs } = await supabase
-          .from("questionnaire_questions")
-          .select("id, questionnaire_options(id)")
-          .eq("questionnaire_id", editingId);
-
-        if (existingQs) {
-          const currentQuestionIds = cleanQuestions.map((q) => q.id).filter(Boolean);
-          const currentOptionIds = cleanQuestions.flatMap((q) => q.options.map((o) => o.id)).filter(Boolean);
-
-          const dbQIds = existingQs.map((q) => q.id);
-          const dbOIds = existingQs.flatMap((q) => q.questionnaire_options.map((o) => o.id));
-
-          const oIdsToDelete = dbOIds.filter((id) => !currentOptionIds.includes(id));
-          const qIdsToDelete = dbQIds.filter((id) => !currentQuestionIds.includes(id));
-
-          if (oIdsToDelete.length > 0) {
-            await supabase.from("questionnaire_options").delete().in("id", oIdsToDelete);
-          }
-          if (qIdsToDelete.length > 0) {
-            await supabase.from("questionnaire_questions").delete().in("id", qIdsToDelete);
-          }
+        // استخدام الـ IDs الجاهزة من الدالة الفاحصة لتنفيذ الحذف الآمن
+        if (deleteIds?.oIds.length) {
+          const { error: delOErr } = await supabase
+            .from("questionnaire_options")
+            .delete()
+            .in("id", deleteIds.oIds);
+          if (delOErr) throw delOErr;
+        }
+        if (deleteIds?.qIds.length) {
+          const { error: delQErr } = await supabase
+            .from("questionnaire_questions")
+            .delete()
+            .in("id", deleteIds.qIds);
+          if (delQErr) throw delQErr;
         }
       } else {
         const { data, error } = await supabase
@@ -238,7 +231,7 @@ function QuestionnairesPage() {
         questionnaireId = data.id;
       }
 
-      // عمل Update للقديم و Insert للجديد
+      // تحديث وإضافة الأسئلة
       for (const [qi, q] of cleanQuestions.entries()) {
         let qRowId = q.id;
 
@@ -309,6 +302,71 @@ function QuestionnairesPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const handlePreSaveCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!meta.name.trim()) return toast.error("Give the questionnaire a name");
+
+    const cleanQuestions = getCleanQuestions(questions);
+    if (cleanQuestions.length === 0)
+      return toast.error("Add at least one question with answer options");
+
+    if (!editingId) {
+      save.mutate(undefined);
+      return;
+    }
+
+    setIsChecking(true);
+    try {
+      const { data: existingQs, error } = await supabase
+        .from("questionnaire_questions")
+        .select("id, questionnaire_options(id)")
+        .eq("questionnaire_id", editingId);
+      
+      if (error) throw error;
+
+      const currentQuestionIds = cleanQuestions.map((q) => q.id).filter(Boolean) as string[];
+      const currentOptionIds = cleanQuestions.flatMap((q) => q.options.map((o) => o.id)).filter(Boolean) as string[];
+      
+      const dbQIds = (existingQs ?? []).map((q) => q.id);
+      const dbOIds = (existingQs ?? []).flatMap((q) => q.questionnaire_options.map((o) => o.id));
+      
+      const qIds = dbQIds.filter((id) => !currentQuestionIds.includes(id));
+      const oIds = dbOIds.filter((id) => !currentOptionIds.includes(id));
+
+      let hasUsage = false;
+      
+      if (qIds.length) {
+        const { count, error: cErr } = await supabase
+          .from("patient_assessment_answers")
+          .select("*", { count: "exact", head: true })
+          .in("question_id", qIds);
+        if (cErr) throw cErr;
+        if (count && count > 0) hasUsage = true;
+      }
+      
+      if (!hasUsage && oIds.length) {
+        const { count, error: cErr } = await supabase
+          .from("patient_assessment_answers")
+          .select("*", { count: "exact", head: true })
+          .in("option_id", oIds);
+        if (cErr) throw cErr;
+        if (count && count > 0) hasUsage = true;
+      }
+
+      if (hasUsage) {
+        setPendingDeleteIds({ qIds, oIds });
+        setWarningOpen(true);
+        setIsChecking(false);
+        return;
+      }
+
+      save.mutate({ qIds, oIds });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setIsChecking(false);
+  };
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
@@ -483,13 +541,7 @@ function QuestionnairesPage() {
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit questionnaire" : "New questionnaire"}</DialogTitle>
           </DialogHeader>
-          <form
-            className="space-y-6"
-            onSubmit={(e) => {
-              e.preventDefault();
-              save.mutate();
-            }}
-          >
+          <form className="space-y-6" onSubmit={handlePreSaveCheck}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Name</Label>
@@ -751,10 +803,42 @@ function QuestionnairesPage() {
               ))}
             </div>
 
-            <Button type="submit" className="w-full" disabled={save.isPending}>
-              {save.isPending ? "Saving…" : editingId ? "Save changes" : "Create questionnaire"}
+            <Button type="submit" className="w-full" disabled={save.isPending || isChecking}>
+              {isChecking ? "Checking impact..." : save.isPending ? "Saving…" : editingId ? "Save changes" : "Create questionnaire"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة التحذير لمنع فقدان البيانات */}
+      <Dialog open={warningOpen} onOpenChange={setWarningOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Warning: Data Loss Risk
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              You are about to delete questions or options that have <strong>already been answered</strong> by patients.
+            </p>
+            <ul className="text-sm text-muted-foreground list-disc list-inside">
+              <li>Deleting a question will <strong>permanently erase</strong> patient answers for that question.</li>
+              <li>Deleting an option will leave existing answers without a selected text (score will remain).</li>
+            </ul>
+            <p className="text-sm font-semibold text-foreground">
+              Are you absolutely sure you want to proceed?
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setWarningOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => {
+                setWarningOpen(false);
+                save.mutate(pendingDeleteIds);
+              }}>
+                Yes, delete and save
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
