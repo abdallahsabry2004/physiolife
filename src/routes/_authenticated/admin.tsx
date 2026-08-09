@@ -97,13 +97,16 @@ function AdminPage() {
     queryKey: ["audit_logs"],
     enabled: isAdmin && !!GOOGLE_SHEETS_WEBHOOK_URL,
     queryFn: async () => {
-      if (GOOGLE_SHEETS_WEBHOOK_URL === "https://script.google.com/macros/s/AKfycbyxxUpADjcTvmW0h6Zc-YrqBFAn9_K9ZMJGMJCSxcCu6iDFet-lwdN3ggCZ8zZOZp9p/exec" || !GOOGLE_SHEETS_WEBHOOK_URL) {
-         return [];
+      try {
+        // تم حذف الشرط الخاطئ وإضافة redirect: "follow" لتخطي مشاكل جوجل
+        const res = await fetch(GOOGLE_SHEETS_WEBHOOK_URL, { redirect: "follow" });
+        if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (err) {
+        console.error(err);
+        return [];
       }
-      const res = await fetch(GOOGLE_SHEETS_WEBHOOK_URL);
-      if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
-      const data = await res.json();
-      return data;
     },
   });
 
@@ -361,7 +364,6 @@ function AdminPage() {
         </CardHeader>
         
         <CardContent className="space-y-2 print:p-0">
-          {/* ترويسة الطباعة الاحترافية الخاصة بالسجلات */}
           <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -382,8 +384,8 @@ function AdminPage() {
           {filteredLogs.length === 0 && (
             <p className="text-sm text-muted-foreground print:text-black">No recorded activity matches your search.</p>
           )}
-          {filteredLogs.map((l: any, idx: number) => (
-            <div key={idx} className="flex flex-col sm:flex-row justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
+          {filteredLogs.map((l: any, index: number) => (
+            <div key={index} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
               <div className="flex flex-col">
                 <span className="font-medium print:text-black text-primary">{l.action}</span>
                 <span className="text-muted-foreground print:text-black text-xs mt-1">
