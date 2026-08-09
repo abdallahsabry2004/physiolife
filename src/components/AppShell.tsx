@@ -14,6 +14,7 @@ import {
   Bell,
   BarChart3,
   Languages,
+  ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
 import { useAuth } from "@/lib/auth";
