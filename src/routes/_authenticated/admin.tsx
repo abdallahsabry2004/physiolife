@@ -409,15 +409,15 @@ const MODULES = ["history", "exam", "diagnosis", "session", "measurements", "bod
 
 // قائمة الألوان المتاحة لعلامات الـ Body Chart
 const MARKER_COLORS = [
-  { label: "Red (Pain)", value: "bg-red-500 text-white" },
-  { label: "Blue (Swelling)", value: "bg-blue-500 text-white" },
-  { label: "Amber (Spasm)", value: "bg-amber-500 text-white" },
-  { label: "Purple (Numbness)", value: "bg-purple-500 text-white" },
-  { label: "Orange (Weakness)", value: "bg-orange-500 text-white" },
-  { label: "Pink (Trigger Point)", value: "bg-pink-500 text-white" },
-  { label: "Green (General)", value: "bg-green-500 text-white" },
-  { label: "Teal (Custom)", value: "bg-teal-500 text-white" },
-  { label: "Black (Note)", value: "bg-zinc-800 text-white" },
+  { label: "Red", value: "bg-red-500 text-white" },
+  { label: "Blue", value: "bg-blue-500 text-white" },
+  { label: "Amber", value: "bg-amber-500 text-white" },
+  { label: "Purple", value: "bg-purple-500 text-white" },
+  { label: "Orange", value: "bg-orange-500 text-white" },
+  { label: "Pink", value: "bg-pink-500 text-white" },
+  { label: "Green", value: "bg-green-500 text-white" },
+  { label: "Teal", value: "bg-teal-500 text-white" },
+  { label: "Black", value: "bg-zinc-800 text-white" },
 ];
 
 function ClinicalFieldCatalog() {
