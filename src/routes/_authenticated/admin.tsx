@@ -404,7 +404,21 @@ function AdminPage() {
   );
 }
 
-const MODULES = ["history", "examination", "diagnosis", "plan"] as const;
+// قم بتحديث المصفوفة لتشمل كافة الأقسام وبنفس المسميات المستخدمة في النظام
+const MODULES = ["history", "exam", "diagnosis", "session", "measurements", "body_chart"] as const;
+
+// قائمة الألوان المتاحة لعلامات الـ Body Chart
+const MARKER_COLORS = [
+  { label: "Red (Pain)", value: "bg-red-500 text-white" },
+  { label: "Blue (Swelling)", value: "bg-blue-500 text-white" },
+  { label: "Amber (Spasm)", value: "bg-amber-500 text-white" },
+  { label: "Purple (Numbness)", value: "bg-purple-500 text-white" },
+  { label: "Orange (Weakness)", value: "bg-orange-500 text-white" },
+  { label: "Pink (Trigger Point)", value: "bg-pink-500 text-white" },
+  { label: "Green (General)", value: "bg-green-500 text-white" },
+  { label: "Teal (Custom)", value: "bg-teal-500 text-white" },
+  { label: "Black (Note)", value: "bg-zinc-800 text-white" },
+];
 
 function ClinicalFieldCatalog() {
   const { t } = useI18n();
@@ -412,13 +426,15 @@ function ClinicalFieldCatalog() {
   const [module, setModule] = useState<string>("history");
   const [label, setLabel] = useState("");
   const [labelAr, setLabelAr] = useState("");
+  // حالة جديدة للون الخاص بـ Body Chart
+  const [markerColor, setMarkerColor] = useState("bg-red-500 text-white");
 
   const { data: fields = [] } = useQuery({
     queryKey: ["clinical_fields_admin"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clinical_fields")
-        .select("id, module, label, label_ar, sort_order")
+        .select("id, module, label, label_ar, sort_order, options")
         .order("module")
         .order("sort_order");
       if (error) throw error;
@@ -428,6 +444,9 @@ function ClinicalFieldCatalog() {
 
   const add = useMutation({
     mutationFn: async () => {
+      // إعداد الـ JSON للخيارات الإضافية (مثل اللون)
+      const optionsData = module === "body_chart" ? { color: markerColor } : {};
+
       const { error } = await supabase.from("clinical_fields").insert({
         module,
         label: label.trim(),
@@ -435,6 +454,7 @@ function ClinicalFieldCatalog() {
         field_type: "text",
         is_suggestion: true,
         sort_order: 999,
+        options: optionsData, // حفظ اللون في الداتا بيز
       });
       if (error) throw error;
     },
@@ -467,7 +487,7 @@ function ClinicalFieldCatalog() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{t("cf.subtitle")}</p>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-4 items-end">
           <div className="space-y-1.5">
             <Label>{t("cf.module")}</Label>
             <Select value={module} onValueChange={setModule}>
@@ -477,7 +497,7 @@ function ClinicalFieldCatalog() {
               <SelectContent>
                 {MODULES.map((m) => (
                   <SelectItem key={m} value={m} className="capitalize">
-                    {m}
+                    {m.replace("_", " ")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -496,27 +516,60 @@ function ClinicalFieldCatalog() {
               onChange={(e) => setLabelAr(e.target.value)}
             />
           </div>
-          <div className="flex items-end">
+
+          {/* إظهار اختيار اللون فقط لو القسم هو Body Chart */}
+          {module === "body_chart" ? (
+            <div className="space-y-1.5">
+              <Label>Highlight Color</Label>
+              <Select value={markerColor} onValueChange={setMarkerColor}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MARKER_COLORS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      <div className="flex items-center gap-2">
+                        <span className={`h-3 w-3 rounded-full ${c.value.split(" ")[0]}`}></span>
+                        {c.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="hidden sm:block"></div>
+          )}
+
+          <div className="flex items-end sm:col-span-4 lg:col-span-1">
             <Button className="w-full" disabled={!label.trim() || add.isPending} onClick={() => add.mutate()}>
               <Plus className="mr-2 h-4 w-4" /> {t("cf.add")}
             </Button>
           </div>
         </div>
-        <div className="max-h-72 space-y-2 overflow-y-auto">
-          {fields.map((f) => (
-            <div key={f.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
-              <span>
-                <Badge variant="secondary" className="me-2 capitalize">
-                  {f.module}
-                </Badge>
-                {f.label}
-                {f.label_ar ? <span className="text-muted-foreground"> · {f.label_ar}</span> : null}
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => remove.mutate(f.id)}>
-                {t("cf.delete")}
-              </Button>
-            </div>
-          ))}
+
+        <div className="max-h-72 space-y-2 overflow-y-auto mt-4">
+          {fields.map((f) => {
+            // استخراج اللون من الـ JSONB إن وجد
+            const colorClass = (f.options as any)?.color?.split(" ")[0];
+            return (
+              <div key={f.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
+                <span className="flex items-center gap-2">
+                  <Badge variant="secondary" className="capitalize">
+                    {f.module.replace("_", " ")}
+                  </Badge>
+                  {f.module === "body_chart" && colorClass && (
+                    <span className={`h-2.5 w-2.5 rounded-full ${colorClass}`}></span>
+                  )}
+                  {f.label}
+                  {f.label_ar ? <span className="text-muted-foreground"> · {f.label_ar}</span> : null}
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => remove.mutate(f.id)}>
+                  {t("cf.delete")}
+                </Button>
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
