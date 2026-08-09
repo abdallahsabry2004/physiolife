@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { logActivityAsync } from "@/lib/logger"; // تم استدعاء دالة المراقبة
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,12 +20,9 @@ type Props = {
   description?: string;
 };
 
-/**
- * Renders only the clinical items the therapist actually added, with the
- * seeded catalog offered as suggestions plus free-text custom items.
- */
 export function ClinicalModule({ patientId, module, sessionId, title, description }: Props) {
-  const { canEditClinical, user } = useAuth();
+  // تم إضافة fullName لتوثيق اسم الطبيب الذي قام بالتعديل
+  const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
   const [custom, setCustom] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -75,6 +73,15 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
         recorded_by: user?.id ?? null,
       });
       if (error) throw error;
+      
+      // توثيق عملية الإضافة في الخلفية
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "ADD_CLINICAL_FIELD",
+        entity: `Patient Record (${module})`,
+        details: { patient_id: patientId, session_id: sessionId, label }
+      });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: recordsKey });
@@ -84,8 +91,25 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
 
   const saveValue = useMutation({
     mutationFn: async ({ id, value }: { id: string; value: string }) => {
+      // البحث عن القيمة القديمة قبل التعديل لتوثيقها
+      const oldRecord = records.find((r) => r.id === id);
+      
       const { error } = await supabase.from("patient_records").update({ value }).eq("id", id);
       if (error) throw error;
+
+      // توثيق عملية التعديل مع حفظ النسخة القديمة والجديدة
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "UPDATE_CLINICAL_NOTES",
+        entity: `Patient Record (${module})`,
+        details: { 
+          patient_id: patientId, 
+          label: oldRecord?.label, 
+          old_value: oldRecord?.value || "(empty)", 
+          new_value: value 
+        }
+      });
     },
     onSuccess: () => {
       toast.success("Saved");
@@ -96,8 +120,22 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
 
   const removeItem = useMutation({
     mutationFn: async (id: string) => {
+      const oldRecord = records.find((r) => r.id === id);
       const { error } = await supabase.from("patient_records").delete().eq("id", id);
       if (error) throw error;
+
+      // توثيق عملية الحذف
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "DELETE_CLINICAL_FIELD",
+        entity: `Patient Record (${module})`,
+        details: { 
+          patient_id: patientId, 
+          label: oldRecord?.label, 
+          deleted_value: oldRecord?.value 
+        }
+      });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: recordsKey });
@@ -109,7 +147,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     const label = custom.trim();
     if (!label) return;
     setCustom("");
-    // remember the new item as a future suggestion too
+    
     await supabase.from("clinical_fields").insert({
       module,
       section: "Custom",
