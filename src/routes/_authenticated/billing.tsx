@@ -5,7 +5,7 @@ import { Plus, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; // استدعاء التوثيق
+import { logActivityAsync } from "@/lib/logger"; // إضافة دالة المراقبة
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,7 @@ export const Route = createFileRoute("/_authenticated/billing")({
 });
 
 function BillingPage() {
-  const { user, fullName, canBill } = useAuth(); // استخراج بيانات المستخدم للتوثيق
+  const { user, canBill, fullName } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -107,8 +107,8 @@ function BillingPage() {
         created_by: user?.id ?? null,
       });
       if (error) throw error;
-
-      // توثيق إنشاء فاتورة جديدة
+      
+      // توثيق إنشاء الفاتورة
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -135,14 +135,13 @@ function BillingPage() {
         received_by: user?.id ?? null,
       });
       if (error) throw error;
-      
       const { error: upErr } = await supabase
         .from("invoices")
         .update({ status: "paid" })
         .eq("id", invoice.id);
       if (upErr) throw upErr;
-
-      // توثيق عملية الدفع
+      
+      // توثيق استلام الدفعة
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
