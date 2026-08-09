@@ -5,9 +5,9 @@ import { OAuth2Client } from "google-auth-library";
 
 // 1. إعداد مصادقة جوجل باستخدام Refresh Token
 function getGoogleAuth() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+  const clientId = process.env['GOOGLE_CLIENT_ID'];
+  const clientSecret = process.env['GOOGLE_CLIENT_SECRET'];
+  const refreshToken = process.env['GOOGLE_REFRESH_TOKEN'];
 
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error("Google OAuth credentials are missing.");
@@ -79,7 +79,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
     const { token } = await auth.getAccessToken();
 
     const rootId = account?.root_folder_id; 
-    const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId);
+    const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId ?? undefined);
     const categoryFolderId = await ensureFolder(auth, data.category, patientFolderId);
 
     const initRes = await fetch(
@@ -144,7 +144,7 @@ export const uploadDriveChunk = createServerFn({ method: "POST" })
 // 4. حفظ بيانات الملف في قاعدة بيانات Supabase
 export const saveFileRecord = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string }) => data)
+  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string | undefined }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { error } = await supabase.from("patient_files").insert({

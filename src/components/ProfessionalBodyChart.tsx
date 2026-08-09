@@ -9,7 +9,7 @@ import { Slider } from "@/components/ui/slider"; // تم إضافة الـ Slide
 
 type Props = {
   patientId: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 };
 
 const MARK_TYPES = [
@@ -177,7 +177,7 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
                 */}
                 <div 
                   className="flex flex-col items-center justify-center transition-transform duration-200"
-                  style={{ transform: `translate(-50%, -50%) scale(${markerSize[0] / 100})` }}
+                  style={{ transform: `translate(-50%, -50%) scale(${(markerSize[0] ?? 100) / 100})` }}
                 >
                   <span
                     className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-md transition-transform hover:scale-105 cursor-default ${

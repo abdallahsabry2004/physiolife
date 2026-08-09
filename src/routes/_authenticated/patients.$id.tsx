@@ -18,6 +18,7 @@ import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
 import { PatientMeasurements } from "@/components/PatientMeasurements";
+import { PatientAssessments } from "@/components/PatientAssessments";
 import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -384,6 +385,7 @@ function PatientDetail() {
           <TabsTrigger value="body">Body chart</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
           <TabsTrigger value="measures">Measurements</TabsTrigger>
+          <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
           <TabsTrigger value="program">Home program</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
@@ -464,7 +466,7 @@ function PatientDetail() {
         </TabsContent>
 
         <TabsContent value="body" className="mt-6 space-y-4">
-          <ProfessionalBodyChart patientId={id} sessionId={undefined} />
+          <ProfessionalBodyChart patientId={id} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
@@ -490,6 +492,10 @@ function PatientDetail() {
 
         <TabsContent value="measures" className="mt-6">
           <PatientMeasurements patientId={id} />
+        </TabsContent>
+
+        <TabsContent value="questionnaires" className="mt-6">
+          <PatientAssessments patientId={id} />
         </TabsContent>
 
         <TabsContent value="program" className="mt-6">

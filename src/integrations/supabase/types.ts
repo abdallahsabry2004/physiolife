@@ -462,6 +462,128 @@ export type Database = {
         }
         Relationships: []
       }
+      patient_assessment_answers: {
+        Row: {
+          assessment_id: string
+          created_at: string
+          id: string
+          option_id: string | null
+          question_id: string
+          score: number
+        }
+        Insert: {
+          assessment_id: string
+          created_at?: string
+          id?: string
+          option_id?: string | null
+          question_id: string
+          score?: number
+        }
+        Update: {
+          assessment_id?: string
+          created_at?: string
+          id?: string
+          option_id?: string | null
+          question_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_assessment_answers_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "patient_assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_assessment_answers_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_assessment_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_assessments: {
+        Row: {
+          assessed_by: string | null
+          assessed_on: string
+          created_at: string
+          final_score: number
+          id: string
+          interpretation: string | null
+          max_possible: number | null
+          notes: string | null
+          patient_id: string
+          questionnaire_id: string
+          raw_score: number
+          session_id: string | null
+          session_number: number | null
+          updated_at: string
+        }
+        Insert: {
+          assessed_by?: string | null
+          assessed_on?: string
+          created_at?: string
+          final_score?: number
+          id?: string
+          interpretation?: string | null
+          max_possible?: number | null
+          notes?: string | null
+          patient_id: string
+          questionnaire_id: string
+          raw_score?: number
+          session_id?: string | null
+          session_number?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assessed_by?: string | null
+          assessed_on?: string
+          created_at?: string
+          final_score?: number
+          id?: string
+          interpretation?: string | null
+          max_possible?: number | null
+          notes?: string | null
+          patient_id?: string
+          questionnaire_id?: string
+          raw_score?: number
+          session_id?: string | null
+          session_number?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_assessments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_assessments_questionnaire_id_fkey"
+            columns: ["questionnaire_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaires"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_assessments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_exercises: {
         Row: {
           assigned_by: string | null
@@ -771,6 +893,136 @@ export type Database = {
           id?: string
           is_active?: boolean
           phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      questionnaire_options: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          label_ar: string | null
+          question_id: string
+          score: number
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          label_ar?: string | null
+          question_id: string
+          score?: number
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          label_ar?: string | null
+          question_id?: string
+          score?: number
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_options_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaire_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      questionnaire_questions: {
+        Row: {
+          created_at: string
+          id: string
+          questionnaire_id: string
+          sort_order: number
+          text: string
+          text_ar: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          questionnaire_id: string
+          sort_order?: number
+          text: string
+          text_ar?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          questionnaire_id?: string
+          sort_order?: number
+          text?: string
+          text_ar?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questionnaire_questions_questionnaire_id_fkey"
+            columns: ["questionnaire_id"]
+            isOneToOne: false
+            referencedRelation: "questionnaires"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      questionnaires: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          interpretation: Json
+          is_active: boolean
+          max_score: number | null
+          mcid: number | null
+          mdc: number | null
+          min_score: number
+          name: string
+          name_ar: string | null
+          scoring_formula: string | null
+          scoring_method: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          interpretation?: Json
+          is_active?: boolean
+          max_score?: number | null
+          mcid?: number | null
+          mdc?: number | null
+          min_score?: number
+          name: string
+          name_ar?: string | null
+          scoring_formula?: string | null
+          scoring_method?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          interpretation?: Json
+          is_active?: boolean
+          max_score?: number | null
+          mcid?: number | null
+          mdc?: number | null
+          min_score?: number
+          name?: string
+          name_ar?: string | null
+          scoring_formula?: string | null
+          scoring_method?: string
           updated_at?: string
         }
         Relationships: []

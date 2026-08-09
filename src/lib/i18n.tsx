@@ -17,6 +17,7 @@ const dict = {
   "nav.dashboard": { en: "Dashboard", ar: "الرئيسية" },
   "nav.patients": { en: "Patients", ar: "المرضى" },
   "nav.exercises": { en: "Exercise Library", ar: "مكتبة التمارين" },
+  "nav.questionnaires": { en: "Questionnaires", ar: "الاستبيانات" },
   "nav.billing": { en: "Billing", ar: "الفواتير" },
   "nav.notifications": { en: "Notifications", ar: "التنبيهات" },
   "nav.analytics": { en: "Analytics", ar: "التحليلات" },

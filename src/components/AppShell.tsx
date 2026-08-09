@@ -14,6 +14,7 @@ import {
   Bell,
   BarChart3,
   Languages,
+  ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +27,7 @@ const nav = [
   { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard },
   { to: "/patients", label: "nav.patients", icon: Users },
   { to: "/exercises", label: "nav.exercises", icon: Dumbbell },
+  { to: "/questionnaires", label: "nav.questionnaires", icon: ClipboardList },
   { to: "/billing", label: "nav.billing", icon: Receipt },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
   { to: "/analytics", label: "nav.analytics", icon: BarChart3 },
