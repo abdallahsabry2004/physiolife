@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Plus, Trash2, Eye } from "lucide-react"; // أضفنا أيقونة Eye
 import { toast } from "sonner";
 import {
   Line,
@@ -48,6 +48,9 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
   const [assessedOn, setAssessedOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
 
+  // State للتحكم في نافذة عرض تفاصيل التقييم القديم
+  const [viewAssessmentId, setViewAssessmentId] = useState<string | null>(null);
+
   const { data: questionnaires = [] } = useQuery({
     queryKey: ["questionnaires-min"],
     queryFn: async () => {
@@ -84,6 +87,25 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
         .select("*")
         .eq("patient_id", patientId)
         .order("assessed_on", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // استعلام جديد لجلب إجابات المريض لتقييم محدد عند الضغط على زر (View)
+  const { data: assessmentDetails = [], isLoading: isLoadingDetails } = useQuery({
+    queryKey: ["assessment-details", viewAssessmentId],
+    enabled: !!viewAssessmentId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("patient_assessment_answers")
+        .select(`
+          id,
+          score,
+          questionnaire_questions ( text ),
+          questionnaire_options ( label )
+        `)
+        .eq("assessment_id", viewAssessmentId!);
       if (error) throw error;
       return data;
     },
@@ -340,18 +362,32 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                       )}
                       {r.notes && <p className="text-muted-foreground">{r.notes}</p>}
                     </div>
-                    {canEditClinical && (
+                    <div className="flex items-center gap-1 print:hidden">
+                      {/* زر عرض تفاصيل التقييم */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-destructive print:hidden"
-                        onClick={() => {
-                          if (confirm("Delete this assessment?")) remove.mutate(r.id);
-                        }}
+                        className="text-primary"
+                        onClick={() => setViewAssessmentId(r.id)}
+                        title="View Answers"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
-                    )}
+
+                      {canEditClinical && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={() => {
+                            if (confirm("Delete this assessment?")) remove.mutate(r.id);
+                          }}
+                          title="Delete Assessment"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -360,6 +396,37 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
         );
       })}
 
+      {/* نافذة عرض تفاصيل الإجابات القديمة */}
+      <Dialog open={!!viewAssessmentId} onOpenChange={(open) => !open && setViewAssessmentId(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Assessment Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {isLoadingDetails ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Loading answers...</p>
+            ) : assessmentDetails.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No detailed answers found for this assessment.</p>
+            ) : (
+              <div className="space-y-3">
+                {assessmentDetails.map((ans: any, idx: number) => (
+                  <div key={ans.id} className="rounded-lg border p-3 bg-secondary/10">
+                    <p className="font-medium text-sm mb-1">
+                      {idx + 1}. {ans.questionnaire_questions?.text || "Unknown Question"}
+                    </p>
+                    <div className="flex justify-between items-center text-sm text-muted-foreground">
+                      <p>Answer: <span className="font-semibold text-primary">{ans.questionnaire_options?.label || "Unknown Option"}</span></p>
+                      <Badge variant="outline">Score: {ans.score}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة إضافة تقييم جديد */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
           <DialogHeader>
