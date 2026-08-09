@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,11 +13,12 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { logActivityAsync } from "@/lib/logger"; // استدعاء دالة المراقبة
 import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
 import { PatientMeasurements } from "@/components/PatientMeasurements";
-import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart"; // تم استدعاء الـ Chart الاحترافي
+import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,8 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-
-// استيراد لوجو المركز
 import logo from "@/assets/physio-life-logo.png";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
@@ -37,8 +37,6 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
         content:
           "Complete physiotherapy record: history, examination, diagnosis, treatment sessions, files and progress graphs.",
       },
-      { property: "og:title", content: "Patient record — Physio Life EMR" },
-      { property: "og:description", content: "Full patient treatment journey in one place." },
     ],
   }),
   component: PatientDetail,
@@ -73,12 +71,22 @@ function PatientDetail() {
 
   const newSession = useMutation({
     mutationFn: async () => {
+      const sessionNum = (sessions[0]?.session_number ?? 0) + 1;
       const { error } = await supabase.from("treatment_sessions").insert({
         patient_id: id,
-        session_number: (sessions[0]?.session_number ?? 0) + 1,
+        session_number: sessionNum,
         therapist_id: user?.id ?? null,
       });
       if (error) throw error;
+
+      // توثيق فتح جلسة جديدة
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "CREATE_SESSION",
+        entity: "Treatment Session",
+        details: { patient_id: id, session_number: sessionNum }
+      });
     },
     onSuccess: () => {
       toast.success("New visit opened");
@@ -89,11 +97,27 @@ function PatientDetail() {
 
   const updateSession = useMutation({
     mutationFn: async ({ sid, patch }: { sid: string; patch: Record<string, unknown> }) => {
+      // جلب بيانات الجلسة القديمة للتوثيق
+      const oldSession = sessions.find(s => s.id === sid);
+      
       const { error } = await supabase
         .from("treatment_sessions")
         .update(patch as never)
         .eq("id", sid);
       if (error) throw error;
+
+      // توثيق تعديل الجلسة مع معرفة التغييرات اللي حصلت
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "UPDATE_SESSION_DETAILS",
+        entity: `Treatment Session #${oldSession?.session_number}`,
+        details: { 
+          patient_id: id, 
+          session_id: sid,
+          updates_applied: patch 
+        }
+      });
     },
     onSuccess: () => {
       toast.success("Session saved");
@@ -104,8 +128,22 @@ function PatientDetail() {
 
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
+      const oldSession = sessions.find(s => s.id === sessionId);
       const { error } = await supabase.from("treatment_sessions").delete().eq("id", sessionId);
       if (error) throw error;
+
+      // توثيق خطير: حذف جلسة كاملة
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "DELETE_SESSION",
+        entity: `Treatment Session #${oldSession?.session_number}`,
+        details: { 
+          patient_id: id, 
+          session_id: sessionId,
+          deleted_data: oldSession 
+        }
+      });
     },
     onSuccess: () => {
       toast.success("Session deleted successfully");
@@ -128,9 +166,6 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* 
-        ======== ترويسة الطباعة الاحترافية (Print Header) ========
-      */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -155,7 +190,6 @@ function PatientDetail() {
           </div>
         </div>
       </div>
-      {/* ======================================================== */}
 
       <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
@@ -326,9 +360,8 @@ function PatientDetail() {
           ))}
         </TabsContent>
         
-        {/* استدعاء الـ Body Chart الاحترافي هنا */}
         <TabsContent value="body" className="mt-6 space-y-4">
-          <ProfessionalBodyChart patientId={id} />
+          <ProfessionalBodyChart patientId={id} sessionId={undefined} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
