@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, UserX, UserCheck } from "lucide-react";
+import { HardDrive, Plus, UserX, UserCheck, Search, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import logo from "@/assets/physio-life-logo.png";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -40,12 +41,14 @@ export const Route = createFileRoute("/_authenticated/admin")({
 const ROLES: AppRole[] = ["super_admin", "therapist", "receptionist", "assistant"];
 
 function AdminPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, fullName } = useAuth();
   const qc = useQueryClient();
   
-  // States لحفظ بيانات الحساب الجديد
   const [driveEmail, setDriveEmail] = useState("");
   const [driveFolderId, setDriveFolderId] = useState("");
+  
+  // State خاص بالبحث في سجلات النظام
+  const [logSearch, setLogSearch] = useState("");
 
   const { data: driveQuota, isLoading: isQuotaLoading } = useQuery({
     queryKey: ["drive_quota"],
@@ -95,7 +98,7 @@ function AdminPage() {
         .from("audit_logs")
         .select("id, action, entity, created_at")
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(100); // زيادة العدد ليكون البحث أكثر فعالية
       if (error) throw error;
       return data;
     },
@@ -156,6 +159,17 @@ function AdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // تصفية السجلات بناءً على شريط البحث
+  const filteredLogs = logs.filter((l) => {
+    const searchLower = logSearch.toLowerCase();
+    const dateStr = new Date(l.created_at).toLocaleString().toLowerCase();
+    return (
+      l.action.toLowerCase().includes(searchLower) ||
+      (l.entity?.toLowerCase() || "").includes(searchLower) ||
+      dateStr.includes(searchLower)
+    );
+  });
+
   if (!isAdmin) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -165,15 +179,15 @@ function AdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header>
+    <div className="space-y-6 print:space-y-0">
+      <header className="print:hidden">
         <h1 className="text-2xl font-bold tracking-tight">Administration</h1>
         <p className="text-sm text-muted-foreground">
           Staff permissions, file storage capacity and activity audit trail.
         </p>
       </header>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle className="text-base">Staff & permissions</CardTitle>
         </CardHeader>
@@ -239,14 +253,13 @@ function AdminPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <HardDrive className="h-4 w-4" /> Google Drive Storage
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          
           <div className="space-y-2 rounded-lg border bg-secondary/30 p-4">
             <div className="flex justify-between items-center mb-1">
               <span className="text-sm font-semibold">Primary Connected Account Quota</span>
@@ -320,21 +333,56 @@ function AdminPage() {
         </CardContent>
       </Card>
 
-      <ClinicalFieldCatalog />
+      <div className="print:hidden">
+        <ClinicalFieldCatalog />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Audit log</CardTitle>
+      <Card className="print:border-none print:shadow-none print:bg-transparent">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
+          <CardTitle className="text-base">Audit Log & System Activity</CardTitle>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search logs..."
+                className="pl-8 sm:w-64"
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" onClick={() => window.print()} className="shrink-0">
+              <Printer className="mr-2 h-4 w-4" /> Print Logs
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {logs.length === 0 && (
-            <p className="text-sm text-muted-foreground">No recorded activity yet.</p>
+        
+        <CardContent className="space-y-2 print:p-0">
+          {/* ترويسة الطباعة الاحترافية الخاصة بالسجلات */}
+          <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-16 w-16" />
+                <div>
+                  <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                </div>
+              </div>
+              <div className="text-right text-xs text-gray-500 space-y-1">
+                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
+                <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mt-6 text-center">System Activity & Audit Log Report</h3>
+          </div>
+
+          {filteredLogs.length === 0 && (
+            <p className="text-sm text-muted-foreground print:text-black">No recorded activity matches your search.</p>
           )}
-          {logs.map((l) => (
-            <div key={l.id} className="flex justify-between rounded-lg border p-3 text-sm">
-              <span>{l.action}</span>
-              <span className="text-muted-foreground">
-                {l.entity} · {new Date(l.created_at).toLocaleString()}
+          {filteredLogs.map((l) => (
+            <div key={l.id} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
+              <span className="font-medium print:text-black">{l.action}</span>
+              <span className="text-muted-foreground print:text-black">
+                {l.entity} · {new Date(l.created_at).toLocaleString('en-GB')}
               </span>
             </div>
           ))}
