@@ -5,6 +5,7 @@ import { Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { logActivityAsync } from "@/lib/logger"; // استدعاء دالة التوثيق
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,7 +54,7 @@ const emptyForm = {
 };
 
 function PatientsPage() {
-  const { user } = useAuth();
+  const { user, fullName } = useAuth(); // استدعاء اسم الطبيب
   const qc = useQueryClient();
   const [term, setTerm] = useState("");
   const [status, setStatus] = useState("all");
@@ -107,6 +108,16 @@ function PatientsPage() {
         .select("id")
         .single();
       if (error) throw error;
+
+      // توثيق تسجيل المريض الجديد في السجلات
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "ADD_NEW_PATIENT",
+        entity: `Patient: ${form.full_name}`,
+        details: { ...form }
+      });
+
       return data;
     },
     onSuccess: () => {
