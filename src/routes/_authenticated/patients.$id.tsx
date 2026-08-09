@@ -464,7 +464,7 @@ function PatientDetail() {
         </TabsContent>
 
         <TabsContent value="body" className="mt-6 space-y-4">
-          <ProfessionalBodyChart patientId={id} sessionId={undefined} />
+          <ProfessionalBodyChart patientId={id} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">

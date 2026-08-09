@@ -192,7 +192,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
               <Label>Exercise from the library</Label>
-              <Select value={exerciseId} onValueChange={setExerciseId}>
+              <Select value={exerciseId ?? ""} onValueChange={setExerciseId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose an exercise" />
                 </SelectTrigger>
