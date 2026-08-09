@@ -7,6 +7,10 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 
+// --- استدعاء الصور المحلية من فولدر assets ---
+import anteriorBodyImg from "@/assets/anterior-body.jpg";
+import posteriorBodyImg from "@/assets/posterior-body.jpg";
+
 type Props = {
   patientId: string;
   sessionId?: string | undefined;
@@ -33,7 +37,7 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
         .order("sort_order");
       if (error) throw error;
       
-      return data.map(d => ({
+      return data.map((d) => ({
         label: d.label,
         // استخراج اللون من الـ JSONB، أو إعطاء لون افتراضي
         color: (d.options as any)?.color || "bg-primary text-primary-foreground"
@@ -166,12 +170,9 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
             addMark.mutate({ x, y });
           }}
         >
+          {/* --- استخدام المتغيرات المحلية للصور بدل الروابط الخارجية --- */}
           <img
-            src={
-              currentView === "anterior"
-                ? "https://6a7798db51198decb752101a.imgix.net/sandbox/anterior%20body.jpg"
-                : "https://6a7798db51198decb752101a.imgix.net/posterior%20body.jpg"
-            }
+            src={currentView === "anterior" ? anteriorBodyImg : posteriorBodyImg}
             alt="Anatomical Body Chart"
             className="h-full w-full object-contain opacity-75 dark:opacity-50 pointer-events-none select-none"
           />
