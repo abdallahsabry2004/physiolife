@@ -50,7 +50,7 @@ function BillingPage() {
   const [payModal, setPayModal] = useState({ open: false, invoice: null as any, amountToPay: "", remaining: 0, type: "full" as "full" | "partial" });
   const [deleteInvoiceModal, setDeleteInvoiceModal] = useState({ open: false, invoice: null as any, password: "" });
   
-  // تحديث حالة الطباعة لتشمل (فاتورة، إيصال، كشف حساب كامل)
+  // حالة بيانات الطباعة
   const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
 
@@ -89,9 +89,10 @@ function BillingPage() {
   const { data: payments = [] } = useQuery({
     queryKey: ["payments"],
     queryFn: async () => {
+      // تم إضافة patient_id هنا لحل مشكلة الفلترة في سجل المريض
       const { data, error } = await supabase
         .from("payments")
-        .select("id, amount, method, paid_on, invoice_id, patients(full_name, code), invoices(*)")
+        .select("id, patient_id, amount, method, paid_on, invoice_id, patients(full_name, code), invoices(*)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -261,7 +262,6 @@ function BillingPage() {
     }, 100);
   };
 
-  // دالة لتجهيز وطباعة كشف الحساب الكامل للمريض
   const handlePrintHistory = () => {
     const patient = patients.find(p => p.id === selectedHistoryPatient);
     if (!patient) return;
@@ -574,6 +574,7 @@ function BillingPage() {
           )}
         </header>
 
+        {/* نافذة استلام الدفع (الدفع الجزئي أو الكلي) */}
         <Dialog open={payModal.open} onOpenChange={(open) => !open && setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -637,6 +638,7 @@ function BillingPage() {
           </DialogContent>
         </Dialog>
 
+        {/* نافذة الحذف الآمن للفواتير بالكامل */}
         <Dialog open={deleteInvoiceModal.open} onOpenChange={(open) => !open && setDeleteInvoiceModal({ open: false, invoice: null, password: "" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
