@@ -5,6 +5,7 @@ import { Plus, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { logActivityAsync } from "@/lib/logger"; // استدعاء التوثيق
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/_authenticated/billing")({
 });
 
 function BillingPage() {
-  const { user, canBill } = useAuth();
+  const { user, fullName, canBill } = useAuth(); // استخراج بيانات المستخدم للتوثيق
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -94,16 +95,27 @@ function BillingPage() {
     mutationFn: async () => {
       const subtotal = Number(form.subtotal || 0);
       const discount = Number(form.discount || 0);
+      const total = subtotal - discount;
+
       const { error } = await supabase.from("invoices").insert({
         patient_id: form.patient_id,
         description: form.description || null,
         sessions_count: form.sessions_count ? Number(form.sessions_count) : null,
         subtotal,
         discount,
-        total: subtotal - discount,
+        total: total,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
+
+      // توثيق إنشاء فاتورة جديدة
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "CREATE_INVOICE",
+        entity: `Invoice for Patient ID: ${form.patient_id}`,
+        details: { subtotal, discount, total }
+      });
     },
     onSuccess: () => {
       toast.success("Invoice created");
@@ -123,11 +135,21 @@ function BillingPage() {
         received_by: user?.id ?? null,
       });
       if (error) throw error;
+      
       const { error: upErr } = await supabase
         .from("invoices")
         .update({ status: "paid" })
         .eq("id", invoice.id);
       if (upErr) throw upErr;
+
+      // توثيق عملية الدفع
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "RECEIVE_PAYMENT",
+        entity: `Payment EGP ${invoice.total}`,
+        details: { invoice_id: invoice.id }
+      });
     },
     onSuccess: () => {
       toast.success("Payment recorded");
