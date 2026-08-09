@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Trash2, Edit } from "lucide-react"; // تم استدعاء أيقونة Edit
+import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Line,
@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger";
+import { logActivityAsync } from "@/lib/logger"; 
 import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
@@ -27,7 +27,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-// تم استدعاء المكونات الخاصة بنافذة التعديل
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import logo from "@/assets/physio-life-logo.png";
@@ -48,12 +47,17 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 
 function PatientDetail() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
-  // State للتحكم في نافذة التعديل والبيانات بداخلها
+  // State للتحكم في نافذة التعديل
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  
+  // State للتحكم في الحذف النهائي
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
 
   const { data: patient } = useQuery({
     queryKey: ["patient", id],
@@ -77,13 +81,11 @@ function PatientDetail() {
     },
   });
 
-  // أمر برمجي لتغيير حالة المريض
   const updateStatus = useMutation({
     mutationFn: async (newStatus: string) => {
       const { error } = await supabase.from("patients").update({ status: newStatus }).eq("id", id);
       if (error) throw error;
 
-      // توثيق التغيير
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -99,7 +101,6 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // أمر برمجي لتحديث بيانات المريض الأساسية
   const updatePatientInfo = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("patients").update(editForm).eq("id", id);
@@ -119,6 +120,45 @@ function PatientDetail() {
       void qc.invalidateQueries({ queryKey: ["patient", id] });
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ميزة الحذف النهائي للمريض مع التأكد من كلمة المرور
+  const deletePatient = useMutation({
+    mutationFn: async () => {
+      if (!user?.email) throw new Error("Email not found");
+      
+      // التأكد من صحة الباسورد
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: deletePassword,
+      });
+      if (authError) throw new Error("Invalid password");
+
+      // الحذف النهائي من الداتا بيز
+      const { error: deleteError } = await supabase.from("patients").delete().eq("id", id);
+      if (deleteError) throw deleteError;
+
+      // توثيق الحذف في الـ Logs
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "HARD_DELETE_PATIENT",
+        entity: `Patient: ${patient?.full_name}`,
+        details: { patient_code: patient?.code, deleted_data: patient }
+      });
+    },
+    onSuccess: () => {
+      toast.success("Patient permanently deleted");
+      setDeleteOpen(false);
+      void qc.invalidateQueries({ queryKey: ["patients"] });
+      void navigate({ to: "/patients" });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      if (e.message.includes("foreign key constraint")) {
+        toast.error("Please ensure Cascade Delete is enabled in the database or delete sessions first.");
+      }
+    },
   });
 
   const newSession = useMutation({
@@ -197,7 +237,6 @@ function PatientDetail() {
       after: s.pain_after,
     }));
 
-  // دالة فتح نافذة التعديل وتعبئة البيانات الحالية
   const openEditModal = () => {
     if (patient) {
       setEditForm({
@@ -219,7 +258,6 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ترويسة الطباعة الاحترافية */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -251,7 +289,6 @@ function PatientDetail() {
             <ArrowLeft className="h-4 w-4" /> All patients
           </Link>
           
-          {/* إضافة أيقونة التعديل بجوار اسم المريض */}
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{patient.full_name}</h1>
             {canEditClinical && (
@@ -267,7 +304,6 @@ function PatientDetail() {
         </div>
         <div className="flex gap-2 items-center">
           
-          {/* تفعيل قائمة اختيار حالة المريض (Status) */}
           {canEditClinical ? (
             <Select value={patient.status} onValueChange={(val) => updateStatus.mutate(val)}>
               <SelectTrigger className="w-32 h-9 capitalize font-medium">
@@ -288,10 +324,15 @@ function PatientDetail() {
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>
+
+          {canEditClinical && (
+            <Button variant="destructive" onClick={() => { setDeletePassword(""); setDeleteOpen(true); }}>
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* نافذة التعديل (Edit Modal) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
@@ -373,6 +414,44 @@ function PatientDetail() {
               {updatePatientInfo.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Permanent Delete Patient
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Are you absolutely sure you want to delete <strong>{patient.full_name}</strong>? 
+              This action cannot be undone. All clinical records, sessions, and files associated with this patient will be permanently removed.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="auth-password">Enter your password to confirm</Label>
+              <Input
+                id="auth-password"
+                type="password"
+                placeholder="********"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end mt-4">
+              <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeletePassword(""); }}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                disabled={deletePatient.isPending || !deletePassword} 
+                onClick={() => deletePatient.mutate()}
+              >
+                {deletePatient.isPending ? "Deleting..." : "Confirm Delete"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -466,7 +545,7 @@ function PatientDetail() {
         </TabsContent>
 
         <TabsContent value="body" className="mt-6 space-y-4">
-          <ProfessionalBodyChart patientId={id} />
+          <ProfessionalBodyChart patientId={id} sessionId={undefined} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
