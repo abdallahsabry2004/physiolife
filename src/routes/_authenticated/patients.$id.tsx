@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle } from "lucide-react"; 
 import { toast } from "sonner";
 import {
   Line,
@@ -47,15 +47,14 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 
 function PatientDetail() {
   const { id } = Route.useParams();
-  const navigate = useNavigate(); // لتوجيه المستخدم بعد الحذف
+  const navigate = useNavigate();
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
-  // State للتحكم في نافذة التعديل
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
 
-  // State للتحكم في نافذة الحذف النهائي وتأكيد الباسورد
+  // متغيرات التحكم في نافذة الحذف النهائي
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
@@ -122,23 +121,20 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // أمر برمجي جديد للحذف النهائي للمريض باستخدام الـ RPC
+  // دالة الحذف النهائي للمريض
   const deletePatient = useMutation({
     mutationFn: async () => {
       if (!user?.email) throw new Error("Email not found");
       
-      // 1. التحقق من صحة كلمة المرور قبل أي إجراء
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: user.email,
         password: deletePassword,
       });
       if (authError) throw new Error("Invalid password");
 
-      // 2. استدعاء الدالة البرمجية (RPC) لمسح المريض وكل ما يتعلق به بأمان
       const { error: deleteError } = await supabase.rpc('delete_patient_completely', { p_id: id });
       if (deleteError) throw deleteError;
 
-      // 3. توثيق عملية الحذف في السجلات
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -151,11 +147,9 @@ function PatientDetail() {
       toast.success("Patient permanently deleted");
       setDeleteOpen(false);
       void qc.invalidateQueries({ queryKey: ["patients"] });
-      void navigate({ to: "/patients" }); // توجيه المستخدم لقائمة المرضى
+      void navigate({ to: "/patients" });
     },
-    onError: (e: Error) => {
-      toast.error(e.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const newSession = useMutation({
@@ -255,7 +249,6 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ترويسة الطباعة الاحترافية */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -323,7 +316,6 @@ function PatientDetail() {
             <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>
 
-          {/* زر الحذف النهائي مع أيقونة سلة المهملات */}
           {canEditClinical && (
             <Button variant="destructive" onClick={() => { setDeletePassword(""); setDeleteOpen(true); }}>
               <Trash2 className="mr-2 h-4 w-4" /> Delete
@@ -332,7 +324,6 @@ function PatientDetail() {
         </div>
       </div>
 
-      {/* نافذة التعديل (Edit Modal) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
@@ -417,7 +408,6 @@ function PatientDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* نافذة تأكيد الحذف النهائي (Delete Modal) */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -546,7 +536,7 @@ function PatientDetail() {
         </TabsContent>
 
         <TabsContent value="body" className="mt-6 space-y-4">
-          <ProfessionalBodyChart patientId={id} />
+          <ProfessionalBodyChart patientId={id} sessionId={undefined} />
         </TabsContent>
 
         <TabsContent value="progress" className="mt-6">
