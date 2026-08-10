@@ -18,6 +18,7 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// مدة الجلسة المؤقتة محددة بـ 60 دقيقة (تُطبق فقط إذا لم يختر المستخدم Remember me)
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // دالة تحميل بيانات الجلسة والمستخدم
   useEffect(() => {
     let active = true;
 
@@ -59,19 +61,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Session timeout on inactivity
+  // مؤقت إنهاء الجلسة عند عدم النشاط (Session timeout on inactivity)
   useEffect(() => {
     if (!session) return;
+    
+    // التحقق مما إذا كان المستخدم قد قام بإلغاء "Remember me" وقت تسجيل الدخول
+    const isSessionOnly = sessionStorage.getItem("pl-session-only") === "1";
+    
+    // إذا قام المستخدم بتفعيل "Remember me"، يتم إنهاء هذا الـ Effect ولن يعمل المؤقت
+    if (!isSessionOnly) return;
+
     let timer: ReturnType<typeof setTimeout>;
+    
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
+        // تسجيل الخروج وتنظيف المتغيرات المؤقتة
         void supabase.auth.signOut();
+        sessionStorage.removeItem("pl-session-only");
       }, SESSION_TIMEOUT_MS);
     };
+
+    // مراقبة نشاط المستخدم لإعادة ضبط العداد
     const events = ["mousedown", "keydown", "touchstart", "scroll"] as const;
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    
     reset();
+    
     return () => {
       clearTimeout(timer);
       events.forEach((e) => window.removeEventListener(e, reset));
@@ -91,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       roles.includes("receptionist") ||
       roles.includes("therapist"),
     signOut: async () => {
+      // تنظيف الجلسة المؤقتة عند تسجيل الخروج يدوياً
+      sessionStorage.removeItem("pl-session-only");
       await supabase.auth.signOut();
     },
   };
