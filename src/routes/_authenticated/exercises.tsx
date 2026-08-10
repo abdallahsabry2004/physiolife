@@ -5,7 +5,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; // إضافة دالة المراقبة
+import { logActivityAsync } from "@/lib/logger"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+// استيراد المكون الذكي للاقتراحات الطبية[cite: 1]
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; 
 
 export const Route = createFileRoute("/_authenticated/exercises")({
   head: () => ({
@@ -72,17 +74,14 @@ function ExercisesPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (editingId) {
-        // جلب البيانات القديمة للتوثيق
         const oldExercise = exercises.find(e => e.id === editingId);
         
-        // تحديث تمرين موجود
         const { error } = await supabase
           .from("exercises")
           .update({ ...form })
           .eq("id", editingId);
         if (error) throw error;
         
-        // توثيق التعديل
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
@@ -91,13 +90,11 @@ function ExercisesPage() {
           details: { old_data: oldExercise, new_data: form }
         });
       } else {
-        // إضافة تمرين جديد
         const { error } = await supabase
           .from("exercises")
           .insert({ ...form, created_by: user?.id ?? null });
         if (error) throw error;
         
-        // توثيق الإضافة
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
@@ -122,7 +119,6 @@ function ExercisesPage() {
       const { error } = await supabase.from("exercises").delete().eq("id", id);
       if (error) throw error;
       
-      // توثيق الحذف
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -207,29 +203,39 @@ function ExercisesPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   {(
                     [
-                      ["category", "Category"],
-                      ["target_muscle", "Target muscle"],
-                      ["difficulty", "Difficulty"],
-                      ["sets", "Sets"],
-                      ["repetitions", "Repetitions"],
-                      ["frequency", "Frequency"],
+                      // تخصيص المكون الذكي لبعض الحقول[cite: 1]
+                      ["category", "Category", "auto"],
+                      ["target_muscle", "Target muscle", "auto"],
+                      ["difficulty", "Difficulty", "auto"],
+                      ["sets", "Sets", "text"],
+                      ["repetitions", "Repetitions", "text"],
+                      ["frequency", "Frequency", "text"],
                     ] as const
-                  ).map(([key, label]) => (
+                  ).map(([key, label, type]) => (
                     <div key={key} className="space-y-2">
                       <Label>{label}</Label>
-                      <Input
-                        value={form[key as keyof typeof form]}
-                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                      />
+                      {type === "auto" ? (
+                        <MedicalAutocomplete
+                          value={form[key as keyof typeof form]}
+                          onChange={(val) => setForm({ ...form, [key]: val })}
+                          placeholder={`Enter ${label.toLowerCase()}...`}
+                        />
+                      ) : (
+                        <Input
+                          value={form[key as keyof typeof form]}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
                 <div className="space-y-2">
                   <Label>Instructions</Label>
-                  <Textarea
-                    rows={3}
+                  {/* تطبيق الاقتراحات الطبية على الإرشادات[cite: 1] */}
+                  <MedicalAutocomplete
                     value={form.instructions}
-                    onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                    onChange={(val) => setForm({ ...form, instructions: val })}
+                    placeholder="Provide step-by-step instructions..."
                   />
                 </div>
                 <div className="space-y-2">
