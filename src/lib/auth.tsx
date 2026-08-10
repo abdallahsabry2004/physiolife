@@ -4,35 +4,41 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "super_admin" | "therapist" | "receptionist" | "assistant";
 
+// إعادة تعريف المفاتيح اللازمة لعمل AppShell و PageGuard
 export type PageKey = "dashboard" | "billing" | "analytics";
 export const RESTRICTED_PAGES: PageKey[] = ["dashboard", "billing", "analytics"];
+
+export type UserPermissions = {
+  can_access_billing: boolean;
+  can_access_dashboard: boolean;
+  can_access_analytics: boolean;
+};
 
 type AuthState = {
   user: User | null;
   session: Session | null;
   roles: AppRole[];
+  permissions: UserPermissions | null;
   fullName: string;
   loading: boolean;
   isAdmin: boolean;
   canEditClinical: boolean;
   canBill: boolean;
-  canViewPage: (page: PageKey) => boolean;
+  canViewPage: (page: PageKey) => boolean; // الدالة المفقودة التي تسببت في توقف الموقع
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
-// مدة الجلسة المؤقتة محددة بـ 60 دقيقة (تُطبق فقط إذا لم يختر المستخدم Remember me)
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  const [permissions, setPermissions] = useState<UserPermissions | null>(null);
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [deniedPages, setDeniedPages] = useState<PageKey[]>([]);
 
-  // دالة تحميل بيانات الجلسة والمستخدم
   useEffect(() => {
     let active = true;
 
@@ -41,28 +47,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       if (!nextSession?.user) {
         setRoles([]);
+        setPermissions(null);
         setFullName("");
-        setDeniedPages([]);
         setLoading(false);
         return;
       }
-      const [{ data: roleRows }, { data: profile }, { data: perms }] = await Promise.all([
+      
+      const [
+        { data: roleRows }, 
+        { data: profile },
+        { data: perms }
+      ] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", nextSession.user.id),
         supabase.from("profiles").select("full_name").eq("id", nextSession.user.id).maybeSingle(),
-        supabase
-          .from("user_page_permissions")
-          .select("page, allowed")
-          .eq("user_id", nextSession.user.id),
+        supabase.from("user_permissions").select("*").eq("user_id", nextSession.user.id).maybeSingle(),
       ]);
+      
       if (!active) return;
-      setRoles((roleRows ?? []).map((r) => r.role as AppRole));
+      
+      const userRoles = (roleRows ?? []).map((r) => r.role as AppRole);
+      setRoles(userRoles);
       setFullName(profile?.full_name || nextSession.user.email || "");
-      setDeniedPages(
-        (perms ?? []).filter((p) => !p.allowed).map((p) => p.page as PageKey),
-      );
+      
+      if (perms) {
+        setPermissions(perms as UserPermissions);
+      } else {
+        setPermissions({
+           can_access_billing: false,
+           can_access_dashboard: false,
+           can_access_analytics: false
+        });
+      }
+      
       setLoading(false);
     };
-
 
     supabase.auth.getSession().then(({ data }) => load(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
@@ -75,14 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // مؤقت إنهاء الجلسة عند عدم النشاط (Session timeout on inactivity)
   useEffect(() => {
     if (!session) return;
     
-    // التحقق مما إذا كان المستخدم قد قام بإلغاء "Remember me" وقت تسجيل الدخول
     const isSessionOnly = sessionStorage.getItem("pl-session-only") === "1";
-    
-    // إذا قام المستخدم بتفعيل "Remember me"، يتم إنهاء هذا الـ Effect ولن يعمل المؤقت
     if (!isSessionOnly) return;
 
     let timer: ReturnType<typeof setTimeout>;
@@ -90,13 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        // تسجيل الخروج وتنظيف المتغيرات المؤقتة
         void supabase.auth.signOut();
         sessionStorage.removeItem("pl-session-only");
       }, SESSION_TIMEOUT_MS);
     };
 
-    // مراقبة نشاط المستخدم لإعادة ضبط العداد
     const events = ["mousedown", "keydown", "touchstart", "scroll"] as const;
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
     
@@ -108,22 +120,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [session]);
 
+  const isSuperAdmin = roles.includes("super_admin");
+
   const value: AuthState = {
     user: session?.user ?? null,
     session,
     roles,
+    permissions,
     fullName,
     loading,
-    isAdmin: roles.includes("super_admin"),
-    canEditClinical: roles.includes("super_admin") || roles.includes("therapist"),
-    canBill:
-      roles.includes("super_admin") ||
-      roles.includes("receptionist") ||
-      roles.includes("therapist"),
-    canViewPage: (page: PageKey) =>
-      roles.includes("super_admin") || !deniedPages.includes(page),
+    isAdmin: isSuperAdmin,
+    canEditClinical: isSuperAdmin || roles.includes("therapist"),
+    canBill: isSuperAdmin || (permissions?.can_access_billing ?? false), 
+    canViewPage: (page: PageKey) => {
+       // الـ Super Admin له صلاحية مطلقة، وباقي الموظفين حسب الإعدادات
+       if (isSuperAdmin) return true;
+       if (page === "dashboard") return permissions?.can_access_dashboard ?? false;
+       if (page === "billing") return permissions?.can_access_billing ?? false;
+       if (page === "analytics") return permissions?.can_access_analytics ?? false;
+       return false;
+    },
     signOut: async () => {
-      // تنظيف الجلسة المؤقتة عند تسجيل الخروج يدوياً
       sessionStorage.removeItem("pl-session-only");
       await supabase.auth.signOut();
     },
