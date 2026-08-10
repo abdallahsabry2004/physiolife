@@ -39,7 +39,11 @@ export const Route = createFileRoute("/_authenticated/billing")({
       },
     ],
   }),
-  component: BillingPage,
+  component: () => (
+    <PageGuard page="billing">
+      <BillingPage />
+    </PageGuard>
+  ),
 });
 
 function BillingPage() {

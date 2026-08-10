@@ -35,7 +35,11 @@ export const Route = createFileRoute("/_authenticated/analytics")({
       },
     ],
   }),
-  component: AnalyticsPage,
+  component: () => (
+    <PageGuard page="analytics">
+      <AnalyticsPage />
+    </PageGuard>
+  ),
 });
 
 const monthKey = (iso: string) => iso.slice(0, 7);

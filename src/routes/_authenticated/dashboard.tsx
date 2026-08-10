@@ -30,7 +30,11 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       },
     ],
   }),
-  component: Dashboard,
+  component: () => (
+    <PageGuard page="dashboard">
+      <Dashboard />
+    </PageGuard>
+  ),
 });
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
