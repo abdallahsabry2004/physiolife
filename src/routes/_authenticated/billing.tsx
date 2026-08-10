@@ -223,11 +223,15 @@ function BillingPage() {
       });
       if (error) throw error;
       
+      // البحث عن اسم المريض باستخدام الـ ID
+      const selectedPatient = patients.find(p => p.id === form.patient_id);
+      const patientName = selectedPatient ? selectedPatient.full_name : form.patient_id;
+
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
         action: "CREATE_INVOICE",
-        entity: `Invoice for Patient ID: ${form.patient_id}`,
+        entity: `Invoice for Patient: ${patientName}`,
         details: { subtotal, discount, total }
       });
     },
@@ -236,7 +240,6 @@ function BillingPage() {
       setOpenInvoiceModal(false);
       setForm({ patient_id: "", description: "", sessions_count: "", subtotal: "", discount: "" });
       
-      // أمر تحديث الشاشة الفوري (المزامنة)
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
@@ -269,11 +272,14 @@ function BillingPage() {
         if (upErr) throw upErr;
       }
 
+      // استخراج اسم المريض من الفاتورة
+      const patientName = (invoice.patients as any)?.full_name || invoice.patient_id;
+
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
         action: "RECEIVE_PAYMENT",
-        entity: `Payment EGP ${amountPaid}`,
+        entity: `Payment EGP ${amountPaid} for Patient: ${patientName}`,
         details: { invoice_id: invoice.id, partial: amountPaid < payModal.remaining }
       });
     },
@@ -281,7 +287,6 @@ function BillingPage() {
       toast.success("Payment recorded successfully");
       setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" });
       
-      // أمر تحديث الشاشة الفوري (المزامنة)
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
