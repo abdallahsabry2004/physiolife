@@ -14,36 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      audit_logs: {
-        Row: {
-          action: string
-          created_at: string
-          details: Json
-          entity: string | null
-          entity_id: string | null
-          id: string
-          user_id: string | null
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          details?: Json
-          entity?: string | null
-          entity_id?: string | null
-          id?: string
-          user_id?: string | null
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          details?: Json
-          entity?: string | null
-          entity_id?: string | null
-          id?: string
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       body_chart_marks: {
         Row: {
           created_at: string
@@ -431,36 +401,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      password_reset_codes: {
-        Row: {
-          attempts: number
-          code_hash: string
-          created_at: string
-          email: string
-          expires_at: string
-          id: string
-          used_at: string | null
-        }
-        Insert: {
-          attempts?: number
-          code_hash: string
-          created_at?: string
-          email: string
-          expires_at: string
-          id?: string
-          used_at?: string | null
-        }
-        Update: {
-          attempts?: number
-          code_hash?: string
-          created_at?: string
-          email?: string
-          expires_at?: string
-          id?: string
-          used_at?: string | null
-        }
-        Relationships: []
       }
       patient_assessment_answers: {
         Row: {
@@ -1164,6 +1104,7 @@ export type Database = {
     }
     Functions: {
       can_edit_clinical: { Args: { _user_id: string }; Returns: boolean }
+      delete_patient_completely: { Args: { p_id: string }; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
