@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; // استدعاء دالة التوثيق
+import { logActivityAsync } from "@/lib/logger"; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,41 +54,61 @@ const emptyForm = {
 };
 
 function PatientsPage() {
-  const { user, fullName } = useAuth(); // استدعاء اسم الطبيب
+  const { user, fullName } = useAuth(); 
   const qc = useQueryClient();
-  const [term, setTerm] = useState("");
+  
+  // حالات التحكم في البحث والفلترة وتقسيم الصفحات (Pagination States)
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("all");
   const [gender, setGender] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
-  const { data: patients = [], isLoading } = useQuery({
-    queryKey: ["patients"],
+  // استعلام ذكي يجلب البيانات على أجزاء من الخادم مباشرة (Server-Side Pagination)
+  const { data, isLoading } = useQuery({
+    queryKey: ["patients", page, pageSize, searchTerm, status, gender],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // نطلب البيانات مع العدد الإجمالي للمرضى
+      let query = supabase
         .from("patients")
-        .select("id, code, full_name, gender, age, phone, status, diagnosis, created_at")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .select("id, code, full_name, gender, age, phone, status, diagnosis, created_at", { count: "exact" })
+        .is("deleted_at", null);
+
+      if (searchTerm) {
+        query = query.or(`full_name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
+      }
+      if (status !== "all") {
+        query = query.eq("status", status);
+      }
+      if (gender !== "all") {
+        query = query.eq("gender", gender);
+      }
+
+      const { data: rows, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
       if (error) throw error;
-      return data;
+      return { items: rows, total: count ?? 0 };
     },
+    placeholderData: (prev) => prev, // لمنع وميض الشاشة أثناء التنقل بين الصفحات
   });
 
-  const filtered = useMemo(() => {
-    const t = term.trim().toLowerCase();
-    return patients.filter((p) => {
-      const matches =
-        !t ||
-        p.full_name.toLowerCase().includes(t) ||
-        (p.phone ?? "").includes(t) ||
-        p.code.toLowerCase().includes(t) ||
-        (p.diagnosis ?? "").toLowerCase().includes(t);
-      const statusOk = status === "all" || p.status === status;
-      const genderOk = gender === "all" || p.gender === gender;
-      return matches && statusOk && genderOk;
-    });
-  }, [patients, term, status, gender]);
+  const totalPages = Math.ceil((data?.total ?? 0) / pageSize) || 1;
+
+  // تنفيذ البحث عند الضغط على Enter أو زر البحث
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearchTerm(searchInput);
+    setPage(1); // العودة للصفحة الأولى عند كل عملية بحث جديدة
+  };
 
   const create = useMutation({
     mutationFn: async () => {
@@ -109,7 +129,6 @@ function PatientsPage() {
         .single();
       if (error) throw error;
 
-      // توثيق تسجيل المريض الجديد في السجلات
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -135,7 +154,7 @@ function PatientsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Patients</h1>
           <p className="text-sm text-muted-foreground">
-            {patients.length} permanent records · instant search by name, phone, ID or diagnosis
+            {data?.total ?? 0} permanent records · instant search by name, phone or ID
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -242,16 +261,22 @@ function PatientsPage() {
 
       <Card>
         <CardContent className="flex flex-wrap gap-3 pt-6">
-          <div className="relative min-w-60 flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search name, phone, patient ID or diagnosis…"
-              value={term}
-              onChange={(e) => setTerm(e.target.value)}
-            />
-          </div>
-          <Select value={status} onValueChange={setStatus}>
+          <form onSubmit={handleSearch} className="relative min-w-60 flex-1 flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Search name, phone or patient ID…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary">Search</Button>
+          </form>
+          <Select 
+            value={status} 
+            onValueChange={(val) => { setStatus(val); setPage(1); }}
+          >
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -262,7 +287,10 @@ function PatientsPage() {
               <SelectItem value="on_hold">On hold</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={gender} onValueChange={setGender}>
+          <Select 
+            value={gender} 
+            onValueChange={(val) => { setGender(val); setPage(1); }}
+          >
             <SelectTrigger className="w-36">
               <SelectValue />
             </SelectTrigger>
@@ -276,11 +304,11 @@ function PatientsPage() {
       </Card>
 
       <div className="grid gap-3">
-        {isLoading && <p className="text-sm text-muted-foreground">Loading patients…</p>}
-        {!isLoading && filtered.length === 0 && (
+        {isLoading && !data && <p className="text-sm text-muted-foreground">Loading patients…</p>}
+        {!isLoading && data?.items?.length === 0 && (
           <p className="text-sm text-muted-foreground">No patients match your search.</p>
         )}
-        {filtered.map((p) => (
+        {data?.items?.map((p) => (
           <Link
             key={p.id}
             to="/patients/$id"
@@ -300,6 +328,47 @@ function PatientsPage() {
           </Link>
         ))}
       </div>
+
+      {/* عناصر التحكم في الصفحات (Pagination Controls) */}
+      {data && data.total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Rows per page:</span>
+            <Select 
+              value={String(pageSize)} 
+              onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+            >
+              <SelectTrigger className="w-[80px] h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" size="sm" 
+                onClick={() => setPage(p => Math.max(1, p - 1))} 
+                disabled={page === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <Button 
+                variant="outline" size="sm" 
+                onClick={() => setPage(p => p + 1)} 
+                disabled={page >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
