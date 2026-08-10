@@ -67,13 +67,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background print:block print:bg-white">
       <aside
         className={cn(
-          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0",
-          // بنتحكم في ظهور وإخفاء الشريط في الموبايل
+          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0 print:hidden",
           open ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
-          // السطر ده هو الحل: بنجبر الشريط يظهر دايماً على الكمبيوتر بأولوية أعلى
           "ltr:lg:translate-x-0 rtl:lg:translate-x-0"
         )}
       >
@@ -116,7 +114,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-sidebar-border p-4">
-          {/* تم إضافة flex و justify-between لترتيب الاسم والأيقونة */}
           <div className="flex items-center justify-between mb-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{fullName || t("shell.staff")}</p>
@@ -124,8 +121,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {roles.map((r) => r.replace("_", " ")).join(", ") || t("shell.noRole")}
               </p>
             </div>
-            
-            {/* الأيقونة اللي هتفتح الـ Popup */}
             <UserProfileModal />
           </div>
 
@@ -153,8 +148,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64">
-        <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
+      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64 print:block print:m-0 print:w-full">
+        <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden print:hidden">
           <button onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
@@ -169,17 +164,32 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </Link>
         </header>
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+
+        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
         
-        {/* Footer الطباعة الثابت */}
-        <div className="hidden print-footer print:flex" dir="rtl">
-          <div className="text-right">
-            <p className="font-bold text-black text-[14px]">Physio Life PT Center</p>
-            <p className="mt-1">قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
+        {/* Footer الطباعة الثابت (بالستايل المباشر لمنع أي تخريب من المتصفح) */}
+        <div 
+          className="hidden print-footer" 
+          dir="rtl"
+          style={{
+            display: 'none', /* بيتم تفعيله من ملف الـ css */
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            borderTop: '3px solid #0f766e',
+            paddingTop: '12px',
+            paddingLeft: '20px',
+            paddingRight: '20px',
+            width: '100%',
+            backgroundColor: 'white'
+          }}
+        >
+          <div style={{ textAlign: 'right', flex: 1 }}>
+            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '15px', color: '#000' }}>Physio Life PT Center</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#4b5563' }}>قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
           </div>
-          <div className="text-left font-semibold">
-            <p className="text-black">للتواصل والحجز</p>
-            <p dir="ltr" className="mt-1">01050359331</p>
+          <div style={{ textAlign: 'left', flex: 1 }}>
+            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#000' }}>للتواصل والحجز</p>
+            <p dir="ltr" style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: 'bold', color: '#4b5563' }}>01050359331</p>
           </div>
         </div>
 
@@ -187,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-foreground/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-foreground/40 lg:hidden print:hidden"
           onClick={() => setOpen(false)}
         />
       )}
