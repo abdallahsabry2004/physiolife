@@ -167,12 +167,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
         
-        {/* Footer الطباعة الثابت */}
-        <div 
-          className="hidden print:flex w-full justify-between items-start pt-3 px-5 bg-white" 
-          dir="rtl"
-          style={{ borderTop: '3px solid #0f766e' }}
-        >
+        {/* الفوتر النظيف والآمن اللي هيظهر في كل الصفحات */}
+        <div className="hidden print:flex print-footer w-full justify-between items-start border-t-[3px] border-teal-700 pt-3 px-5 bg-white" dir="rtl">
           <div className="text-right flex-1">
             <p className="m-0 font-bold text-[15px] text-black">Physio Life PT Center</p>
             <p className="m-0 mt-1 text-[12px] text-gray-600">قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
@@ -182,6 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p dir="ltr" className="m-0 mt-1 text-[13px] font-bold text-gray-600">01050359331</p>
           </div>
         </div>
+
       </div>
 
       {open && (
