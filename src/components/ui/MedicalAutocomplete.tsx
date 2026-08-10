@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+// استيراد مكتبة العضلات التي أنشأناها للتو
+import { ANATOMY_LIBRARY } from "@/lib/anatomy";
 
 interface MedicalAutocompleteProps {
   value: string;
@@ -10,7 +12,6 @@ interface MedicalAutocompleteProps {
   className?: string;
 }
 
-// تعريف نوع البيانات للاحتفاظ بالكلمات ومواقعها الدقيقة في النص
 type SearchWord = { word: string; index: number };
 type SuggestionItem = { text: string; startIdx: number };
 
@@ -24,7 +25,6 @@ export function MedicalAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   
-  // حالة لمنع البحث التلقائي مباشرة بعد اختيار الطبيب لاقتراح
   const [skipNextSearch, setSkipNextSearch] = useState(false);
   
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -42,7 +42,7 @@ export function MedicalAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🧠 الخوارزمية الذكية لاستخراج آخر 1، 2، و 3 كلمات
+  // 🧠 استخراج الكلمات الحالية من مؤشر الكتابة
   const updateSearchContext = (target: HTMLTextAreaElement) => {
     const textValue = target.value;
     const cursorPosition = target.selectionStart;
@@ -56,7 +56,6 @@ export function MedicalAutocomplete({
     let match;
     const wordsInfo: SearchWord[] = [];
     
-    // حساب نقطة بداية الجملة الحالية بالنسبة للنص كله
     const sentenceStart = textBeforeCursor.length - currentSentence.length;
 
     while ((match = wordRegex.exec(currentSentence)) !== null) {
@@ -66,7 +65,7 @@ export function MedicalAutocomplete({
       });
     }
 
-    // أخذ آخر 3 كلمات فقط كحد أقصى لتكوين اقتراحات مركبة
+    // نأخذ آخر 3 كلمات كحد أقصى لتكوين اقتراحات مركبة
     const lastWords = wordsInfo.slice(-3);
     setSearchContext({ lastWords, cursorPosition });
     
@@ -84,7 +83,7 @@ export function MedicalAutocomplete({
     updateSearchContext(e.currentTarget);
   };
 
-  // 🚀 نظام إرسال الطلبات المتوازية (Parallel Requests) للاقتراحات
+  // 🚀 تنفيذ البحث المزدوج (Hybrid Search)
   useEffect(() => {
     if (skipNextSearch) {
       setSkipNextSearch(false);
@@ -103,44 +102,49 @@ export function MedicalAutocomplete({
       try {
         const fetchPromises = [];
         const queriesInfo: { query: string; startIdx: number }[] = [];
-
-        // بناء طلبات بحث للكلمة الأخيرة، الكلمتين، والـ 3 كلمات
-        for (let i = 1; i <= lastWords.length; i++) {
-          const wordsSubset = lastWords.slice(-i);
-          const query = wordsSubset.map(w => w.word).join(' ');
-          
-          if (query.length >= 2) {
-             queriesInfo.push({ query, startIdx: wordsSubset[0].index });
-             // نطلب 5 اقتراحات كحد أقصى لكل تركيبة لعدم ازدحام القائمة
-             fetchPromises.push(
-               fetch(`https://clinicaltables.nlm.nih.gov/api/conditions/v3/search?terms=${encodeURIComponent(query)}&df=primary_name&maxList=5`).then(r => r.json())
-             );
-          }
-        }
-
-        if (fetchPromises.length === 0) {
-          setIsLoading(false);
-          return;
-        }
-
-        const results = await Promise.all(fetchPromises);
         const newSuggestions: SuggestionItem[] = [];
         const seen = new Set<string>();
 
-        // دمج النتائج مع إعطاء الأولوية للكلمات المركبة (3 كلمات ثم 2 ثم 1)
-        for (let i = results.length - 1; i >= 0; i--) {
-           const data = results[i];
-           const qInfo = queriesInfo[i];
-           
-           if (data && data[3]) {
-              data[3].forEach((item: string[]) => {
-                 const text = item[0];
-                 if (!seen.has(text.toLowerCase())) {
-                    seen.add(text.toLowerCase());
-                    newSuggestions.push({ text, startIdx: qInfo.startIdx });
-                 }
-              });
-           }
+        // 1. البحث السريع في مكتبة العضلات (Local Anatomy DB)
+        for (let i = lastWords.length; i >= 1; i--) {
+          const wordsSubset = lastWords.slice(-i);
+          const query = wordsSubset.map(w => w.word).join(' ').toLowerCase();
+          
+          if (query.length >= 2) {
+            // البحث داخل المصفوفة
+            ANATOMY_LIBRARY.forEach(muscle => {
+              if (muscle.toLowerCase().includes(query) && !seen.has(muscle.toLowerCase())) {
+                seen.add(muscle.toLowerCase());
+                newSuggestions.push({ text: muscle, startIdx: wordsSubset[0].index });
+              }
+            });
+            
+            // 2. تجهيز طلبات البحث للمصطلحات الطبية (External API)
+            queriesInfo.push({ query, startIdx: wordsSubset[0].index });
+            fetchPromises.push(
+              fetch(`https://clinicaltables.nlm.nih.gov/api/conditions/v3/search?terms=${encodeURIComponent(query)}&df=primary_name&maxList=5`).then(r => r.json())
+            );
+          }
+        }
+
+        // تنفيذ طلبات الـ API الخارجي
+        if (fetchPromises.length > 0) {
+          const results = await Promise.all(fetchPromises);
+
+          for (let i = results.length - 1; i >= 0; i--) {
+             const data = results[i];
+             const qInfo = queriesInfo[i];
+             
+             if (data && data[3]) {
+                data[3].forEach((item: string[]) => {
+                   const text = item[0];
+                   if (!seen.has(text.toLowerCase())) {
+                      seen.add(text.toLowerCase());
+                      newSuggestions.push({ text, startIdx: qInfo.startIdx });
+                   }
+                });
+             }
+          }
         }
 
         setSuggestions(newSuggestions);
@@ -156,7 +160,7 @@ export function MedicalAutocomplete({
     return () => clearTimeout(delayDebounceFn);
   }, [searchContext]);
 
-  // ✨ دالة الإدراج الذكي: تستبدل فقط الكلمات التي تم البحث بناءً عليها
+  // ✨ الإدراج الذكي للنص
   const handleSelectSuggestion = (suggestion: SuggestionItem) => {
     const { startIdx } = suggestion;
     const { cursorPosition } = searchContext;
@@ -166,11 +170,10 @@ export function MedicalAutocomplete({
     
     const newText = textBefore + suggestion.text + textAfter;
     
-    setSkipNextSearch(true); // منع البحث التلقائي بعد اختيار الاقتراح
+    setSkipNextSearch(true);
     onChange(newText);
     setIsOpen(false);
     
-    // إعادة التركيز للمربع ليستمر الطبيب في الكتابة
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
