@@ -26,10 +26,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import logo from "@/assets/physio-life-logo.png";
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[cite: 1] استيراد المكون
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
   head: () => ({
@@ -78,6 +78,9 @@ function PatientDetail() {
       return data;
     },
   });
+
+  // حالة لتخزين التعديلات المؤقتة لملاحظات الجلسة قبل حفظها
+  const [sessionDrafts, setSessionDrafts] = useState<Record<string, string>>({});
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -394,9 +397,10 @@ function PatientDetail() {
             </div>
             <div className="space-y-2">
               <Label>Working diagnosis</Label>
-              <Input
+              {/*[cite: 1] استخدام المكون الذكي هنا لتسهيل إدخال التشخيص */}
+              <MedicalAutocomplete
                 value={editForm.diagnosis}
-                onChange={(e) => setEditForm({ ...editForm, diagnosis: e.target.value })}
+                onChange={(val) => setEditForm({ ...editForm, diagnosis: val })}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -494,7 +498,7 @@ function PatientDetail() {
             <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
           )}
           {sessions.map((s) => (
-            <Card key={s.id} className="print:mb-4">
+            <Card key={s.id} className="print:mb-4 overflow-visible">
               <CardHeader className="flex flex-row items-center justify-between pb-2 print:pb-1">
                 <CardTitle className="text-base font-bold text-primary print:text-black">
                   Session #{s.session_number} · {s.session_date}
@@ -512,18 +516,35 @@ function PatientDetail() {
                   </Button>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4 print:space-y-2">
+              <CardContent className="space-y-4 print:space-y-2 overflow-visible">
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["subjective", "objective", "assessment", "plan"] as const).map((k) => (
-                    <div key={k} className="space-y-2 print:space-y-0">
+                    <div key={k} className="space-y-2 print:space-y-0 relative">
                       <Label className="capitalize font-bold text-gray-700">{k}</Label>
-                      <Textarea
-                        rows={3} disabled={!canEditClinical} defaultValue={s[k] ?? ""} className="print:text-sm print:leading-relaxed"
-                        onBlur={(e) => {
-                          if ((s[k] ?? "") !== e.target.value)
-                            updateSession.mutate({ sid: s.id, patch: { [k]: e.target.value } });
-                        }}
-                      />
+                      {/*[cite: 1] استبدال Textarea بمكون الاقتراحات مع توفير مساحة عرض مناسبة */}
+                      {!canEditClinical ? (
+                        <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0">
+                          {s[k] || "—"}
+                        </div>
+                      ) : (
+                        <div 
+                          onBlur={(e) => {
+                            // نمنع تحديث القيمة إذا كان التركيز لا يزال داخل القائمة المنسدلة
+                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                              const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
+                              if ((s[k] ?? "") !== draftValue) {
+                                updateSession.mutate({ sid: s.id, patch: { [k]: draftValue } });
+                              }
+                            }
+                          }}
+                        >
+                          <MedicalAutocomplete
+                            value={sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? ""}
+                            onChange={(val) => setSessionDrafts(prev => ({ ...prev, [`${s.id}-${k}`]: val }))}
+                            placeholder={`Enter ${k} notes...`}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
