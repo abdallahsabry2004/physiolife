@@ -5,7 +5,8 @@ type ToasterProps = React.ComponentProps<typeof Sonner>;
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
-      className="toaster group"
+      // تم إضافة الكلاس print:hidden هنا لإخفاء حاوية الإشعارات بالكامل أثناء الطباعة
+      className="toaster group print:hidden"
       toastOptions={{
         classNames: {
           toast:
