@@ -17,7 +17,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
-import { useAuth } from "@/lib/auth";
+import { useAuth, type PageKey } from "@/lib/auth";
 import { useI18n, type TKey } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
