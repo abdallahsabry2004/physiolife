@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -57,25 +57,36 @@ function PatientsPage() {
   const { user, fullName } = useAuth(); 
   const qc = useQueryClient();
   
-  // حالات التحكم في البحث والفلترة وتقسيم الصفحات (Pagination States)
+  // حالات التحكم في البحث والفلترة وتقسيم الصفحات
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("all");
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  // تم إعادة الافتراضي إلى 10
+  const [pageSize, setPageSize] = useState(10); 
   
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
-  // استعلام ذكي يجلب البيانات على أجزاء من الخادم مباشرة (Server-Side Pagination)
+  // نظام الـ Debounce: يراقب ما تكتبه وينفذ البحث التلقائي بعد التوقف عن الكتابة بـ 400 مللي ثانية
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setPage(1); // العودة للصفحة الأولى دائماً مع أي بحث جديد أو مسح للبحث
+    }, 400);
+
+    // تنظيف المؤقت لو المستخدم كتب حرف جديد قبل انتهاء الـ 400 مللي ثانية
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // استعلام ذكي يجلب البيانات من قاعدة البيانات بناءً على الفلاتر والبحث
   const { data, isLoading } = useQuery({
     queryKey: ["patients", page, pageSize, searchTerm, status, gender],
     queryFn: async () => {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      // نطلب البيانات مع العدد الإجمالي للمرضى
       let query = supabase
         .from("patients")
         .select("id, code, full_name, gender, age, phone, status, diagnosis, created_at", { count: "exact" })
@@ -98,17 +109,10 @@ function PatientsPage() {
       if (error) throw error;
       return { items: rows, total: count ?? 0 };
     },
-    placeholderData: (prev) => prev, // لمنع وميض الشاشة أثناء التنقل بين الصفحات
+    placeholderData: (prev) => prev,
   });
 
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize) || 1;
-
-  // تنفيذ البحث عند الضغط على Enter أو زر البحث
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchTerm(searchInput);
-    setPage(1); // العودة للصفحة الأولى عند كل عملية بحث جديدة
-  };
 
   const create = useMutation({
     mutationFn: async () => {
@@ -261,18 +265,15 @@ function PatientsPage() {
 
       <Card>
         <CardContent className="flex flex-wrap gap-3 pt-6">
-          <form onSubmit={handleSearch} className="relative min-w-60 flex-1 flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Search name, phone or patient ID…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-              />
-            </div>
-            <Button type="submit" variant="secondary">Search</Button>
-          </form>
+          <div className="relative min-w-60 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search name, phone or patient ID…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
           <Select 
             value={status} 
             onValueChange={(val) => { setStatus(val); setPage(1); }}
@@ -329,7 +330,6 @@ function PatientsPage() {
         ))}
       </div>
 
-      {/* عناصر التحكم في الصفحات (Pagination Controls) */}
       {data && data.total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-2">
@@ -343,6 +343,8 @@ function PatientsPage() {
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="20">20</SelectItem>
                 <SelectItem value="50">50</SelectItem>
+                {/* تم إضافة خيار 100 كما طلبت */}
+                <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
           </div>
