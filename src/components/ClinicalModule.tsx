@@ -223,27 +223,35 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                 )}
               </div>
               {/*[cite: 1] تم استبدال الـ Textarea بمكون الاقتراحات الطبية */}
+              {/*[cite: 1] استبدال جزء عرض النص في ClinicalModule.tsx */}
               {!canEditClinical ? (
-                <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0">
+                <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0 whitespace-pre-wrap break-words">
                   {r.value || "—"}
                 </div>
               ) : (
-                <div onBlur={(e) => {
-                    // التحقق مما إذا كان التركيز لا يزال داخل المكون لمنع الحفظ المبكر
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                       const currentValue = drafts[r.id] ?? r.value ?? "";
-                       if ((r.value ?? "") !== currentValue) {
-                         saveValue.mutate({ id: r.id, value: currentValue });
-                       }
-                    }
-                  }}
-                >
-                  <MedicalAutocomplete
-                    value={drafts[r.id] ?? r.value ?? ""}
-                    onChange={(val) => setDrafts((d) => ({ ...d, [r.id]: val }))}
-                    placeholder={`Enter ${r.label.toLowerCase()}...`}
-                  />
-                </div>
+                <>
+                  <div 
+                    className="print:hidden"
+                    onBlur={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                         const currentValue = drafts[r.id] ?? r.value ?? "";
+                         if ((r.value ?? "") !== currentValue) {
+                           saveValue.mutate({ id: r.id, value: currentValue });
+                         }
+                      }
+                    }}
+                  >
+                    <MedicalAutocomplete
+                      value={drafts[r.id] ?? r.value ?? ""}
+                      onChange={(val) => setDrafts((d) => ({ ...d, [r.id]: val }))}
+                      placeholder={`Enter ${r.label.toLowerCase()}...`}
+                    />
+                  </div>
+                  {/* النسخة المخفية اللي بتظهر في الطباعة فقط عشان النص يتمدد بالكامل بدون أي قص */}
+                  <div className="hidden print:block text-sm p-0 border-none whitespace-pre-wrap break-words text-black">
+                    {drafts[r.id] ?? r.value ?? "—"}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
