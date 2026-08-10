@@ -1077,6 +1077,33 @@ export type Database = {
           },
         ]
       }
+      user_page_permissions: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          id: string
+          page: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          page: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          page?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
