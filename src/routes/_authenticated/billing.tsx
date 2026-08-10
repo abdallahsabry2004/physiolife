@@ -55,9 +55,15 @@ function BillingPage() {
   const [payModal, setPayModal] = useState({ open: false, invoice: null as any, amountToPay: "", remaining: 0, type: "full" as "full" | "partial" });
   const [deleteInvoiceModal, setDeleteInvoiceModal] = useState({ open: false, invoice: null as any, password: "" });
   
-  // حالات بيانات الطباعة وسجل المريض
   const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
+
+  // كود العزل الذكي لمنع تداخل هيدر الفاتورة
+  useEffect(() => {
+    if (printData) document.body.classList.add("printing-isolated");
+    else document.body.classList.remove("printing-isolated");
+    return () => document.body.classList.remove("printing-isolated");
+  }, [printData]);
 
   const [form, setForm] = useState({
     patient_id: "",
@@ -67,9 +73,6 @@ function BillingPage() {
     discount: "",
   });
 
-  // -------------------------------------------------------------
-  // إعدادات الـ Pagination والبحث (Server-Side)
-  // -------------------------------------------------------------
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -79,7 +82,6 @@ function BillingPage() {
   const [payPage, setPayPage] = useState(1);
   const [payPageSize, setPayPageSize] = useState(10);
 
-  // نظام الـ Debounce للبحث التلقائي
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchTerm(searchInput);
@@ -89,7 +91,6 @@ function BillingPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // جلب قائمة المرضى لاستخدامها في القوائم المنسدلة (Dropdowns)
   const { data: patients = [] } = useQuery({
     queryKey: ["patients-min"],
     queryFn: async () => {
@@ -102,14 +103,12 @@ function BillingPage() {
     },
   });
 
-  // 1. الاستعلام المخصص للفواتير مع التقسيم والبحث
   const { data: invoicesData, isLoading: invLoading } = useQuery({
     queryKey: ["invoices_paginated", invPage, invPageSize, searchTerm],
     queryFn: async () => {
       const from = (invPage - 1) * invPageSize;
       const to = from + invPageSize - 1;
 
-      // نجلب الدفعات المرتبطة بكل فاتورة لحساب الرصيد المتبقي مباشرة
       let query = supabase
         .from("invoices")
         .select("*, patients!inner(full_name, code), payments(amount)", { count: "exact" });
@@ -128,7 +127,6 @@ function BillingPage() {
     placeholderData: (prev) => prev,
   });
 
-  // 2. الاستعلام المخصص للمدفوعات مع التقسيم والبحث
   const { data: paymentsData, isLoading: payLoading } = useQuery({
     queryKey: ["payments_paginated", payPage, payPageSize, searchTerm],
     queryFn: async () => {
@@ -153,7 +151,6 @@ function BillingPage() {
     placeholderData: (prev) => prev,
   });
 
-  // 3. الاستعلام المخصص لحساب الإجمالي المتبقي (Total Outstanding) للعيادة كلها
   const { data: totalOutstanding = 0 } = useQuery({
     queryKey: ["total_outstanding"],
     queryFn: async () => {
@@ -172,7 +169,6 @@ function BillingPage() {
     }
   });
 
-  // 4. الاستعلام المخصص لسجل المريض المالي (يعمل فقط عند اختيار مريض)
   const { data: patientHistory } = useQuery({
     queryKey: ["patient_billing_history", selectedHistoryPatient],
     enabled: selectedHistoryPatient !== "all",
@@ -188,7 +184,6 @@ function BillingPage() {
   const totalInvPages = Math.ceil((invoicesData?.total ?? 0) / invPageSize) || 1;
   const totalPayPages = Math.ceil((paymentsData?.total ?? 0) / payPageSize) || 1;
 
-  // Real-time Sync عبر قنوات Supabase
   useEffect(() => {
     const channel = supabase
       .channel("realtime-billing")
@@ -210,7 +205,6 @@ function BillingPage() {
     };
   }, [qc]);
 
-  // إنشاء فاتورة جديدة (مع تحديث الشاشة لحظياً)
   const createInvoice = useMutation({
     mutationFn: async () => {
       const subtotal = Number(form.subtotal || 0);
@@ -228,7 +222,6 @@ function BillingPage() {
       });
       if (error) throw error;
       
-      // البحث عن اسم المريض باستخدام الـ ID
       const selectedPatient = patients.find(p => p.id === form.patient_id);
       const patientName = selectedPatient ? selectedPatient.full_name : form.patient_id;
 
@@ -252,7 +245,6 @@ function BillingPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // استلام دفعة جديدة (مع تحديث الشاشة لحظياً)
   const receivePayment = useMutation({
     mutationFn: async () => {
       const amountPaid = payModal.type === "full" ? payModal.remaining : Number(payModal.amountToPay);
@@ -277,7 +269,6 @@ function BillingPage() {
         if (upErr) throw upErr;
       }
 
-      // استخراج اسم المريض من الفاتورة
       const patientName = (invoice.patients as any)?.full_name || invoice.patient_id;
 
       logActivityAsync({
@@ -300,7 +291,6 @@ function BillingPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // الحذف الآمن للفاتورة (مع تحديث الشاشة لحظياً)
   const secureDeleteInvoice = useMutation({
     mutationFn: async () => {
       if (!user?.email) throw new Error("Email not found");
@@ -329,7 +319,6 @@ function BillingPage() {
       toast.success("Invoice and associated payments permanently deleted.");
       setDeleteInvoiceModal({ open: false, invoice: null, password: "" });
       
-      // أمر تحديث الشاشة الفوري (المزامنة)
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
@@ -338,7 +327,6 @@ function BillingPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // حذف دفعة (مع تحديث الشاشة لحظياً)
   const deletePayment = useMutation({
     mutationFn: async ({ paymentId, invoiceId }: { paymentId: string, invoiceId: string | null }) => {
       const { error } = await supabase.from("payments").delete().eq("id", paymentId);
@@ -358,7 +346,6 @@ function BillingPage() {
     onSuccess: () => {
       toast.success("Payment deleted. Invoice status reverted to unpaid.");
       
-      // أمر تحديث الشاشة الفوري (المزامنة)
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
@@ -377,7 +364,7 @@ function BillingPage() {
     setPrintData({ type, data });
     setTimeout(() => {
       window.print();
-      setPrintData(null); // إعادة تعيين البيانات لكي يعمل الفوتر في الطباعات التالية
+      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
     }, 150);
   };
 
@@ -406,7 +393,7 @@ function BillingPage() {
 
     setTimeout(() => {
       window.print();
-      setPrintData(null); // إعادة تعيين البيانات لكي يعمل الفوتر في الطباعات التالية
+      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
     }, 150);
   };
 
@@ -414,7 +401,7 @@ function BillingPage() {
     <div className="space-y-6">
       {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
-        <div className="w-full bg-white pb-8 print:block hidden">
+        <div className="isolated-print-container hidden print:block bg-white p-8 min-h-screen">
           <div className="border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -455,7 +442,6 @@ function BillingPage() {
               </div>
             </div>
 
-            {/* قالب طباعة الفاتورة الواحدة */}
             {printData.type === 'invoice' && (
               <div className="space-y-4">
                 <div className="bg-gray-50 p-6 rounded-lg border">
@@ -485,7 +471,6 @@ function BillingPage() {
               </div>
             )}
 
-            {/* قالب طباعة الدفعة الواحدة */}
             {printData.type === 'payment' && (
               <div className="space-y-4">
                 <div className="bg-gray-50 p-6 rounded-lg border mb-4">
@@ -510,7 +495,6 @@ function BillingPage() {
               </div>
             )}
 
-            {/* قالب طباعة السجل المالي الكامل للمريض */}
             {printData.type === 'history' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-3 gap-4">
@@ -596,7 +580,7 @@ function BillingPage() {
       )}
       {/* ---------------------------------------------------------------------------------------- */}
 
-      <div className={printData ? "hidden print:hidden" : "space-y-6"}>
+      <div className={printData ? "hidden" : "space-y-6"}>
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Billing & Payments</h1>
@@ -682,7 +666,6 @@ function BillingPage() {
           )}
         </header>
 
-        {/* نافذة استلام الدفع (الدفع الجزئي أو الكلي) */}
         <Dialog open={payModal.open} onOpenChange={(open) => !open && setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -746,7 +729,6 @@ function BillingPage() {
           </DialogContent>
         </Dialog>
 
-        {/* نافذة الحذف الآمن للفواتير بالكامل */}
         <Dialog open={deleteInvoiceModal.open} onOpenChange={(open) => !open && setDeleteInvoiceModal({ open: false, invoice: null, password: "" })}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
@@ -790,7 +772,6 @@ function BillingPage() {
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             
-            {/* شريط البحث الموحد لتبويب Overview */}
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -862,7 +843,6 @@ function BillingPage() {
                   );
                 })}
 
-                {/* أزرار التنقل للفواتير */}
                 {invoicesData && invoicesData.total > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
                     <div className="flex items-center gap-2">
@@ -935,7 +915,6 @@ function BillingPage() {
                   </div>
                 ))}
 
-                {/* أزرار التنقل للمدفوعات */}
                 {paymentsData && paymentsData.total > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
                     <div className="flex items-center gap-2">
