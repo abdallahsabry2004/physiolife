@@ -56,11 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [
         { data: roleRows }, 
         { data: profile },
-        { data: perms }
+        { data: perms } // هترجع Array مش Object واحد
       ] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", nextSession.user.id),
         supabase.from("profiles").select("full_name").eq("id", nextSession.user.id).maybeSingle(),
-        supabase.from("user_permissions").select("*").eq("user_id", nextSession.user.id).maybeSingle(),
+        // تم تصحيح اسم الجدول وإزالة maybeSingle
+        supabase.from("user_page_permissions").select("page, allowed").eq("user_id", nextSession.user.id),
       ]);
       
       if (!active) return;
@@ -69,8 +70,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRoles(userRoles);
       setFullName(profile?.full_name || nextSession.user.email || "");
       
-      if (perms) {
-        setPermissions(perms as UserPermissions);
+      // تحويل الـ Array اللي راجعة من الداتا بيز لـ Object يطابق الـ UserPermissions type
+      if (perms && perms.length > 0) {
+        const permissionsObj = {
+           can_access_billing: false,
+           can_access_dashboard: false,
+           can_access_analytics: false
+        };
+        perms.forEach((p) => {
+           if (p.page === "dashboard") permissionsObj.can_access_dashboard = p.allowed;
+           if (p.page === "billing") permissionsObj.can_access_billing = p.allowed;
+           if (p.page === "analytics") permissionsObj.can_access_analytics = p.allowed;
+        });
+        setPermissions(permissionsObj);
       } else {
         setPermissions({
            can_access_billing: false,
