@@ -205,10 +205,21 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   ).length;
 
   return (
-    <>
+    <div className="patient-exercises-wrapper">
+      {/* ----------------- حيلة إخفاء الهيدر العام أثناء الطباعة ----------------- */}
+      {isPrintingHEP && (
+        <style>{`
+          @media print {
+            main *:has(.patient-exercises-wrapper) > *:not(:has(.patient-exercises-wrapper)) {
+                display: none !important;
+            }
+          }
+        `}</style>
+      )}
+
       {/* ----------------- قالب طباعة البرنامج المنزلي (HEP) ----------------- */}
       {isPrintingHEP && (
-        <div className="fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
+        <div className="w-full bg-white pb-8 print:block hidden">
           {/* Header */}
           <div className="border-b-2 border-primary pb-6 mb-8">
             <div className="flex justify-between items-start">
@@ -307,7 +318,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
       {/* --------------------------------------------------------------------------------------- */}
 
       {/* الواجهة العادية المخفية أثناء الطباعة */}
-      <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
+      <div className={isPrintingHEP ? "hidden print:hidden" : "space-y-6"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -462,6 +473,6 @@ export function PatientExercises({ patientId }: { patientId: string }) {
           })}
         </div>
       </div>
-    </>
+    </div>
   );
 }
