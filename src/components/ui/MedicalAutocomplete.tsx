@@ -10,23 +10,28 @@ interface MedicalAutocompleteProps {
   className?: string;
 }
 
+// تعريف نوع البيانات للاحتفاظ بالكلمات ومواقعها الدقيقة في النص
+type SearchWord = { word: string; index: number };
+type SuggestionItem = { text: string; startIdx: number };
+
 export function MedicalAutocomplete({
   value,
   onChange,
   placeholder = "Start typing...",
   className,
 }: MedicalAutocompleteProps) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  
+  // حالة لمنع البحث التلقائي مباشرة بعد اختيار الطبيب لاقتراح
+  const [skipNextSearch, setSkipNextSearch] = useState(false);
   
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // حالة لتتبع الكلمات الحالية التي يكتبها الطبيب ومكانها في النص
-  const [searchContext, setSearchContext] = useState({ query: "", start: 0, end: 0 });
+  const [searchContext, setSearchContext] = useState<{ lastWords: SearchWord[], cursorPosition: number }>({ lastWords: [], cursorPosition: 0 });
 
-  // إغلاق القائمة المنسدلة عند الضغط في أي مكان خارج المكون
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -37,72 +42,110 @@ export function MedicalAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🧠 الدالة الذكية لاستخراج الكلمات التي يتم كتابتها حالياً للبحث عنها
+  // 🧠 الخوارزمية الذكية لاستخراج آخر 1، 2، و 3 كلمات
   const updateSearchContext = (target: HTMLTextAreaElement) => {
     const textValue = target.value;
     const cursorPosition = target.selectionStart;
 
-    // 1. أخذ النص من البداية حتى مكان المؤشر الحالي
     const textBeforeCursor = textValue.slice(0, cursorPosition);
-    
-    // 2. تقسيم النص بناءً على الفواصل القاطعة للجملة (سطر جديد، نقطة، فاصلة)
     const delimiters = /[\n,.]/; 
     const sentences = textBeforeCursor.split(delimiters);
-    const currentSentence = sentences[sentences.length - 1]; // الجملة الحالية
+    const currentSentence = sentences[sentences.length - 1];
 
-    // 3. تقسيم الجملة الحالية إلى كلمات بناءً على المسافات (Spaces)
-    const words = currentSentence.split(' ');
-
-    // 4. أخذ آخر 3 كلمات كحد أقصى للبحث (لدعم المصطلحات الطبية المركبة مثل Low back pain)
-    const maxWordsToSearch = 3;
-    const lastWords = words.slice(-maxWordsToSearch).join(' ');
-
-    // 5. حساب نقطة البداية الدقيقة للاستبدال لضمان عدم مسح النص القديم
-    const query = lastWords.trimStart();
-    const finalStart = cursorPosition - query.length;
-
-    setSearchContext({ query, start: finalStart, end: cursorPosition });
+    const wordRegex = /\S+/g;
+    let match;
+    const wordsInfo: SearchWord[] = [];
     
-    // إغلاق القائمة إذا كانت الكلمة أقل من حرفين
-    if (query.length < 2) {
+    // حساب نقطة بداية الجملة الحالية بالنسبة للنص كله
+    const sentenceStart = textBeforeCursor.length - currentSentence.length;
+
+    while ((match = wordRegex.exec(currentSentence)) !== null) {
+      wordsInfo.push({ 
+        word: match[0], 
+        index: sentenceStart + match.index 
+      });
+    }
+
+    // أخذ آخر 3 كلمات فقط كحد أقصى لتكوين اقتراحات مركبة
+    const lastWords = wordsInfo.slice(-3);
+    setSearchContext({ lastWords, cursorPosition });
+    
+    if (lastWords.length === 0) {
       setIsOpen(false);
     }
   };
 
-  // معالجة تغيير النص
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
     updateSearchContext(e.target);
   };
 
-  // تحديث مكان المؤشر عند تحريك الأسهم أو الضغط بالماوس
   const handleCursorMove = (e: React.MouseEvent<HTMLTextAreaElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
     updateSearchContext(e.currentTarget);
   };
 
-  // نظام الـ Debounce للبحث في API الخارجي
+  // 🚀 نظام إرسال الطلبات المتوازية (Parallel Requests) للاقتراحات
   useEffect(() => {
-    const { query } = searchContext;
+    if (skipNextSearch) {
+      setSkipNextSearch(false);
+      return;
+    }
+
+    const { lastWords } = searchContext;
     
-    if (!query || query.length < 2) {
+    if (!lastWords || lastWords.length === 0) {
       setSuggestions([]);
       return;
     }
 
-    // الانتظار 400 مللي ثانية بعد الكتابة لتقليل الضغط على السيرفر الخارجي
     const delayDebounceFn = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          `https://clinicaltables.nlm.nih.gov/api/conditions/v3/search?terms=${encodeURIComponent(query)}&df=primary_name&maxList=8`
-        );
-        const data = await response.json();
-        
-        if (data && data[3]) {
-          const results = data[3].map((item: string[]) => item[0]);
-          setSuggestions(results);
-          if (results.length > 0) setIsOpen(true);
+        const fetchPromises = [];
+        const queriesInfo: { query: string; startIdx: number }[] = [];
+
+        // بناء طلبات بحث للكلمة الأخيرة، الكلمتين، والـ 3 كلمات
+        for (let i = 1; i <= lastWords.length; i++) {
+          const wordsSubset = lastWords.slice(-i);
+          const query = wordsSubset.map(w => w.word).join(' ');
+          
+          if (query.length >= 2) {
+             queriesInfo.push({ query, startIdx: wordsSubset[0].index });
+             // نطلب 5 اقتراحات كحد أقصى لكل تركيبة لعدم ازدحام القائمة
+             fetchPromises.push(
+               fetch(`https://clinicaltables.nlm.nih.gov/api/conditions/v3/search?terms=${encodeURIComponent(query)}&df=primary_name&maxList=5`).then(r => r.json())
+             );
+          }
         }
+
+        if (fetchPromises.length === 0) {
+          setIsLoading(false);
+          return;
+        }
+
+        const results = await Promise.all(fetchPromises);
+        const newSuggestions: SuggestionItem[] = [];
+        const seen = new Set<string>();
+
+        // دمج النتائج مع إعطاء الأولوية للكلمات المركبة (3 كلمات ثم 2 ثم 1)
+        for (let i = results.length - 1; i >= 0; i--) {
+           const data = results[i];
+           const qInfo = queriesInfo[i];
+           
+           if (data && data[3]) {
+              data[3].forEach((item: string[]) => {
+                 const text = item[0];
+                 if (!seen.has(text.toLowerCase())) {
+                    seen.add(text.toLowerCase());
+                    newSuggestions.push({ text, startIdx: qInfo.startIdx });
+                 }
+              });
+           }
+        }
+
+        setSuggestions(newSuggestions);
+        if (newSuggestions.length > 0) setIsOpen(true);
+
       } catch (error) {
         console.error("Failed to fetch medical terms:", error);
       } finally {
@@ -111,20 +154,23 @@ export function MedicalAutocomplete({
     }, 400);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchContext.query]);
+  }, [searchContext]);
 
-  // دالة الإدراج الذكي: استبدال الجملة الحالية فقط بالمصطلح المختار
-  const handleSelectSuggestion = (suggestion: string) => {
-    const { start, end } = searchContext;
-    const textBefore = value.slice(0, start);
-    const textAfter = value.slice(end);
+  // ✨ دالة الإدراج الذكي: تستبدل فقط الكلمات التي تم البحث بناءً عليها
+  const handleSelectSuggestion = (suggestion: SuggestionItem) => {
+    const { startIdx } = suggestion;
+    const { cursorPosition } = searchContext;
     
-    // دمج النص القديم مع المصطلح الجديد
-    const newText = textBefore + suggestion + textAfter;
+    const textBefore = value.slice(0, startIdx);
+    const textAfter = value.slice(cursorPosition);
+    
+    const newText = textBefore + suggestion.text + textAfter;
+    
+    setSkipNextSearch(true); // منع البحث التلقائي بعد اختيار الاقتراح
     onChange(newText);
     setIsOpen(false);
     
-    // إعادة التركيز على حقل الإدخال ليتمكن الطبيب من إكمال الكتابة
+    // إعادة التركيز للمربع ليستمر الطبيب في الكتابة
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
@@ -151,7 +197,6 @@ export function MedicalAutocomplete({
         </div>
       </div>
 
-      {/* قائمة الاقتراحات (Dropdown) */}
       {isOpen && suggestions.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-xl animate-in fade-in-0 zoom-in-95">
           {suggestions.map((suggestion, index) => (
@@ -160,7 +205,7 @@ export function MedicalAutocomplete({
               onClick={() => handleSelectSuggestion(suggestion)}
               className="relative flex w-full cursor-pointer select-none items-center border-b border-border/50 last:border-0 px-3 py-2.5 text-sm outline-none hover:bg-muted hover:text-foreground font-medium transition-colors"
             >
-              {suggestion}
+              {suggestion.text}
             </li>
           ))}
         </ul>
