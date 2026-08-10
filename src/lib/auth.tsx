@@ -120,6 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       roles.includes("super_admin") ||
       roles.includes("receptionist") ||
       roles.includes("therapist"),
+    canViewPage: (page: PageKey) =>
+      roles.includes("super_admin") || !deniedPages.includes(page),
     signOut: async () => {
       // تنظيف الجلسة المؤقتة عند تسجيل الخروج يدوياً
       sessionStorage.removeItem("pl-session-only");
