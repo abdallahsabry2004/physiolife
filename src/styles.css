@@ -156,38 +156,53 @@
     margin: 15mm 15mm 25mm 15mm; 
   }
   
-  /* إزالة قيود المتصفح لضمان تمدد الصفحات وتثبيت الفوتر */
-  html, body, #root {
-    height: auto !important;
-    position: static !important;
-    display: block !important;
-    overflow: visible !important;
-    contain: none !important;
-    transform: none !important;
-    background-color: white !important;
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   
   /* إخفاء القوائم والأزرار */
-  aside, nav, header.lg\:hidden, button, [role="tablist"], .print\:hidden {
+  aside, nav, header.lg\:hidden, button, .print\:hidden {
     display: none !important;
   }
 
-  /* تنظيف الكروت */
-  .rounded-xl, .border, .shadow, .card {
-    border: none !important;
-    box-shadow: none !important;
-    background: transparent !important;
-    page-break-inside: avoid;
-  }
-
-  /* الفوتر الثابت بقوة في أسفل كل صفحة */
+  /* الفوتر الثابت في أسفل الورقة دائماً */
   .print-footer {
     display: flex !important;
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
-    width: 100vw !important;
-    z-index: 999999 !important;
+    width: 100% !important;
     background-color: white !important;
+    z-index: 999999 !important;
+  }
+
+  /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة والفوتر فقط */
+  body.printing-isolated * {
+    visibility: hidden;
+  }
+  body.printing-isolated .isolated-print-container,
+  body.printing-isolated .isolated-print-container * {
+    visibility: visible;
+  }
+  body.printing-isolated .print-footer,
+  body.printing-isolated .print-footer * {
+    visibility: visible;
+  }
+  body.printing-isolated .isolated-print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* إجبار مربعات النصوص (Textarea) على إظهار النص بالكامل وعدم قصه */
+  textarea {
+    height: auto !important;
+    min-height: fit-content !important;
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    border: none !important;
+    resize: none !important;
   }
 }
