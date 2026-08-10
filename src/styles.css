@@ -148,56 +148,45 @@
 }
 
 /* =========================================
-   إعدادات الطباعة الاحترافية (النسخة النهائية)
+   إعدادات الطباعة الاحترافية 
    ========================================= */
 @media print {
   @page {
     size: A4;
-    /* بنسيب 25 ملم من تحت عشان الفوتر ياخد راحته وميدخلش في الكلام */
     margin: 15mm 15mm 25mm 15mm; 
   }
   
-  /* إجبار كل الحاويات على التمدد وعدم قص المحتوى لصفحة واحدة */
-  html, body, #root, .min-h-screen, .h-screen, .overflow-y-auto, .overflow-hidden {
+  /* إزالة قيود المتصفح لضمان تمدد الصفحات وتثبيت الفوتر */
+  html, body, #root {
     height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
+    position: static !important;
     display: block !important;
+    overflow: visible !important;
+    contain: none !important;
+    transform: none !important;
     background-color: white !important;
   }
-
-  /* إخفاء أي عناصر غير مطلوبة في الطباعة */
+  
+  /* إخفاء القوائم والأزرار */
   aside, nav, header.lg\:hidden, button, [role="tablist"], .print\:hidden {
     display: none !important;
   }
 
-  /* تنظيف الكروت لتظهر كصفحة بيضاء */
+  /* تنظيف الكروت */
   .rounded-xl, .border, .shadow, .card {
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;
-    page-break-inside: avoid; /* يمنع قسم الكارت بين صفحتين */
+    page-break-inside: avoid;
   }
 
-  textarea, input {
-    border: none !important;
-    background: transparent !important;
-    resize: none !important;
-    min-height: auto !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    color: #000 !important;
-  }
-
-  /* الفوتر الثابت: استخدمنا !important لضمان عدم تأثره بأي كلاس آخر */
+  /* الفوتر الثابت بقوة في أسفل كل صفحة */
   .print-footer {
     display: flex !important;
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
+    width: 100vw !important;
     z-index: 999999 !important;
     background-color: white !important;
   }
