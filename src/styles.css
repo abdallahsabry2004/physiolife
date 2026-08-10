@@ -147,39 +147,37 @@
 
 }
 
-/* إعدادات الطباعة الاحترافية للتقارير الطبية */
+/* =========================================
+   إعدادات الطباعة الاحترافية (النسخة النهائية)
+   ========================================= */
 @media print {
   @page {
     size: A4;
-    /* مساحة 2.5 سم من الأسفل مخصصة للفوتر عشان مايحصلش تداخل ولا صفحات بيضاء */
-    margin: 1.5cm 1.5cm 2.5cm 1.5cm;
+    /* بنسيب 25 ملم من تحت عشان الفوتر ياخد راحته وميدخلش في الكلام */
+    margin: 15mm 15mm 25mm 15mm; 
   }
   
-  /* إلغاء الارتفاعات الإجبارية لمنع ظهور صفحات بيضاء إضافية */
-  html, body, #root, .min-h-screen {
+  /* إجبار كل الحاويات على التمدد وعدم قص المحتوى لصفحة واحدة */
+  html, body, #root, .min-h-screen, .h-screen, .overflow-y-auto, .overflow-hidden {
     height: auto !important;
     min-height: auto !important;
-    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
     background-color: white !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
 
-  /* إخفاء القائمة الجانبية والشريط العلوي وأزرار التابات */
-  aside, nav, button, [role="tablist"], .print\:hidden {
+  /* إخفاء أي عناصر غير مطلوبة في الطباعة */
+  aside, nav, header.lg\:hidden, button, [role="tablist"], .print\:hidden {
     display: none !important;
   }
 
-  /* إظهار العناصر المخصصة للطباعة فقط */
-  .print\:block {
-    display: block !important;
-  }
-
-  /* تنظيف الكروت لتظهر كصفحة بيضاء احترافية */
-  .rounded-xl, .border, .shadow {
+  /* تنظيف الكروت لتظهر كصفحة بيضاء */
+  .rounded-xl, .border, .shadow, .card {
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;
+    page-break-inside: avoid; /* يمنع قسم الكارت بين صفحتين */
   }
 
   textarea, input {
@@ -189,30 +187,18 @@
     min-height: auto !important;
     padding: 0 !important;
     margin: 0 !important;
-    overflow: hidden !important;
-    box-shadow: none !important;
-    color: #111 !important;
+    color: #000 !important;
   }
 
-  [role="tabpanel"] {
-    margin-top: 0 !important;
-  }
-
-  /* إعدادات الفوتر الثابت في كل صفحة */
+  /* الفوتر الثابت: استخدمنا !important لضمان عدم تأثره بأي كلاس آخر */
   .print-footer {
     display: flex !important;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    background-color: white;
-    padding-top: 10px;
-    padding-bottom: 5px;
-    border-top: 2px solid var(--color-primary);
-    font-size: 12px;
-    color: #4b5563;
-    z-index: 999999 !important; /* ضروري عشان يظهر فوق أي شاشة */
-    page-break-inside: avoid;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    z-index: 999999 !important;
+    background-color: white !important;
   }
 }
