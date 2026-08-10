@@ -168,36 +168,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             )}
           </Link>
-        <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
-          <button onClick={() => setOpen(true)} aria-label="Open menu">
-            <Menu className="h-5 w-5" />
-          </button>
-          <img src={logo} alt="" width={28} height={28} className="h-7 w-7" />
-          <span className="font-semibold">{t("app.name")}</span>
-          <Link to="/notifications" className="ms-auto relative" aria-label={t("nav.notifications")}>
-            <Bell className="h-5 w-5" />
-            {unread > 0 && (
-              <span className="absolute -end-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                {unread}
-              </span>
-            )}
-          </Link>
         </header>
-        
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
-
-        {/* Footer الطباعة الثابت */}
-        <div className="hidden print-footer print:flex" dir="rtl">
-          <div className="text-right">
-            <p className="font-bold text-black text-[14px]">Physio Life PT Center</p>
-            <p className="mt-1">قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
-          </div>
-          <div className="text-left font-semibold">
-            <p className="text-black">للتواصل والحجز</p>
-            <p dir="ltr" className="mt-1">01050359331</p>
-          </div>
-        </div>
-
       </div>
 
       {open && (
