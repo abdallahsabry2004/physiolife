@@ -305,11 +305,17 @@ function QuestionnairesPage() {
 
   const handlePreSaveCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meta.name.trim()) return toast.error("Give the questionnaire a name");
+    if (!meta.name.trim()) {
+      toast.error("Give the questionnaire a name");
+      return;
+    }
 
     const cleanQuestions = getCleanQuestions(questions);
-    if (cleanQuestions.length === 0)
-      return toast.error("Add at least one question with answer options");
+    if (cleanQuestions.length === 0) {
+      toast.error("Add at least one question with answer options");
+      return;
+    }
+
 
     if (!editingId) {
       save.mutate(undefined);

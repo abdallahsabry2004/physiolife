@@ -47,8 +47,9 @@ export function ProfessionalBodyChart({ patientId, sessionId }: Props) {
 
   // ضبط العلامة النشطة الافتراضية
   useEffect(() => {
-    if (dynamicMarkTypes.length > 0 && !activeMarkType) {
-      setActiveMarkType(dynamicMarkTypes[0].label);
+    const first = dynamicMarkTypes[0];
+    if (first && !activeMarkType) {
+      setActiveMarkType(first.label);
     }
   }, [dynamicMarkTypes, activeMarkType]);
 
