@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, UserX, UserCheck, Search, Printer, ChevronLeft, ChevronRight } from "lucide-react";
+import { HardDrive, Plus, UserX, UserCheck, Search, Printer, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logo from "@/assets/physio-life-logo.png";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -53,6 +54,9 @@ function AdminPage() {
   const [logSearchTerm, setLogSearchTerm] = useState("");
   const [logPage, setLogPage] = useState(1);
   const [logPageSize, setLogPageSize] = useState(20);
+  
+  // حالة التحكم في نافذة عرض التفاصيل للسجلات
+  const [selectedLogDetails, setSelectedLogDetails] = useState<any>(null);
 
   // نظام الـ Debounce لتحديث كلمة البحث بعد التوقف عن الكتابة لتخفيف الضغط
   useEffect(() => {
@@ -194,6 +198,33 @@ function AdminPage() {
       </p>
     );
   }
+
+  // دالة لفك تشفير وتنسيق الـ JSON الخاص بالتفاصيل
+  const renderLogDetails = () => {
+    if (!selectedLogDetails || !selectedLogDetails.details) return <p className="text-muted-foreground">No extra details available.</p>;
+    try {
+      const parsedDetails = typeof selectedLogDetails.details === 'string' 
+        ? JSON.parse(selectedLogDetails.details) 
+        : selectedLogDetails.details;
+        
+      if (Object.keys(parsedDetails).length === 0) return <p className="text-muted-foreground">No extra details available.</p>;
+
+      return (
+        <div className="space-y-2 mt-4 bg-muted/30 p-4 rounded-md border">
+          {Object.entries(parsedDetails).map(([key, value]) => (
+            <div key={key} className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
+              <span className="font-semibold text-muted-foreground capitalize col-span-1">{key.replace(/_/g, ' ')}:</span>
+              <span className="col-span-2 break-words">
+                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    } catch (e) {
+      return <p className="text-sm text-muted-foreground break-all">{selectedLogDetails.details}</p>;
+    }
+  };
 
   return (
     <div className="space-y-6 print:space-y-0">
@@ -398,17 +429,29 @@ function AdminPage() {
           ) : (
             <div className="space-y-2">
               {logsData?.items?.map((l: any, index: number) => (
-                <div key={index} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
-                  <div className="flex flex-col">
+                <div key={index} className="flex justify-between items-center rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
+                  <div className="flex flex-col flex-1">
                     <span className="font-medium print:text-black text-primary">{l.action}</span>
                     <span className="text-muted-foreground print:text-black text-xs mt-1">
                       <span className="font-bold text-gray-700 mr-1">User:</span>{l.user_name || "System"}
                     </span>
                   </div>
-                  <span className="text-muted-foreground print:text-black mt-2 sm:mt-0 text-right">
-                    <div className="font-medium">{l.entity}</div>
-                    <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
-                  </span>
+                  <div className="text-muted-foreground print:text-black mt-2 sm:mt-0 flex items-center justify-end gap-3 flex-1 text-right">
+                    <div>
+                      <div className="font-medium">{l.entity}</div>
+                      <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
+                    </div>
+                    {/* زرار عرض التفاصيل (Eye) يظهر في الشاشة فقط وليس الطباعة */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="print:hidden text-primary shrink-0" 
+                      onClick={() => setSelectedLogDetails(l)}
+                      title="View Details"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -456,6 +499,24 @@ function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* نافذة تفاصيل العملية (Log Details Modal) */}
+      <Dialog open={!!selectedLogDetails} onOpenChange={(open) => !open && setSelectedLogDetails(null)}>
+        <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Activity Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-1">
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Action:</span> {selectedLogDetails?.action}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">User:</span> {selectedLogDetails?.user_name || "System"}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Entity:</span> {selectedLogDetails?.entity}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Time:</span> {selectedLogDetails?.created_at ? new Date(selectedLogDetails.created_at).toLocaleString('en-GB') : ""}</p>
+            </div>
+            {renderLogDetails()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
