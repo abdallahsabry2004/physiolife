@@ -51,11 +51,9 @@ function PatientDetail() {
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
-  // State للتحكم في نافذة التعديل
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
 
-  // State للتحكم في نافذة الحذف النهائي
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
@@ -101,7 +99,6 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // تم تحديث هذه الدالة لتنظيف البيانات (Sanitization) قبل إرسالها لتفادي أخطاء الـ Database
   const updatePatientInfo = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -265,7 +262,7 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ترويسة الطباعة الاحترافية */}
+      {/* ترويسة الطباعة الأصلية كما طلبت */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -283,18 +280,10 @@ function PatientDetail() {
 
         <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
           <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
-            <div className="flex items-center min-w-0 pr-2">
-              <span className="font-semibold text-gray-500 mr-2 shrink-0">Patient Name:</span> 
-              <span 
-                className="font-bold whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px]"
-                style={{ fontSize: patient.full_name.length > 30 ? '0.9rem' : '1.125rem' }}
-              >
-                {patient.full_name}
-              </span>
-            </div>
-            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
-            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+            <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
           </div>
         </div>
       </div>
@@ -349,7 +338,6 @@ function PatientDetail() {
         </div>
       </div>
 
-      {/* نافذة التعديل (Edit Modal) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
@@ -434,7 +422,6 @@ function PatientDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* نافذة الحذف النهائي (Delete Modal) */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
