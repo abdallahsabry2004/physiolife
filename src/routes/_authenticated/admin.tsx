@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, UserX, UserCheck, Search, Printer } from "lucide-react";
+import { HardDrive, Plus, UserX, UserCheck, Search, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
@@ -13,7 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { getDriveQuota } from "@/lib/drive.functions";
-// استيراد رابط الشيت من ملف المراقبة
 import { GOOGLE_SHEETS_WEBHOOK_URL } from "@/lib/logger"; 
 import {
   Select,
@@ -49,8 +48,20 @@ function AdminPage() {
   const [driveEmail, setDriveEmail] = useState("");
   const [driveFolderId, setDriveFolderId] = useState("");
   
-  // State خاص بالبحث في سجلات النظام
-  const [logSearch, setLogSearch] = useState("");
+  // حالات التحكم في البحث وتقسيم الصفحات للسجلات
+  const [logSearchInput, setLogSearchInput] = useState("");
+  const [logSearchTerm, setLogSearchTerm] = useState("");
+  const [logPage, setLogPage] = useState(1);
+  const [logPageSize, setLogPageSize] = useState(20);
+
+  // نظام الـ Debounce لتحديث كلمة البحث بعد التوقف عن الكتابة لتخفيف الضغط
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLogSearchTerm(logSearchInput);
+      setLogPage(1); // العودة للصفحة الأولى عند البحث
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [logSearchInput]);
 
   const { data: driveQuota, isLoading: isQuotaLoading } = useQuery({
     queryKey: ["drive_quota"],
@@ -92,23 +103,34 @@ function AdminPage() {
     },
   });
 
-  // قراءة السجلات من شيت جوجل مباشرة بدلاً من قاعدة بيانات Supabase
-  const { data: logs = [] } = useQuery({
-    queryKey: ["audit_logs"],
+  // استعلام ذكي يرسل المتغيرات إلى Google Apps Script ليقوم بالفلترة وتقسيم الصفحات هناك
+  const { data: logsData, isLoading: logsLoading } = useQuery({
+    queryKey: ["audit_logs", logPage, logPageSize, logSearchTerm],
     enabled: isAdmin && !!GOOGLE_SHEETS_WEBHOOK_URL,
     queryFn: async () => {
       try {
-        // تم حذف الشرط الخاطئ وإضافة redirect: "follow" لتخطي مشاكل جوجل
-        const res = await fetch(GOOGLE_SHEETS_WEBHOOK_URL, { redirect: "follow" });
+        const url = new URL(GOOGLE_SHEETS_WEBHOOK_URL);
+        url.searchParams.append("page", logPage.toString());
+        url.searchParams.append("pageSize", logPageSize.toString());
+        if (logSearchTerm) {
+          url.searchParams.append("searchTerm", logSearchTerm);
+        }
+
+        const res = await fetch(url.toString(), { redirect: "follow" });
         if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
         const data = await res.json();
-        return Array.isArray(data) ? data : [];
+        
+        // إرجاع البيانات والعدد الإجمالي القادم من سيرفرات جوجل
+        return { items: data.items || [], total: data.total || 0 };
       } catch (err) {
         console.error(err);
-        return [];
+        return { items: [], total: 0 };
       }
     },
+    placeholderData: (prev) => prev,
   });
+
+  const totalLogPages = Math.ceil((logsData?.total ?? 0) / logPageSize) || 1;
 
   const setRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
@@ -163,18 +185,6 @@ function AdminPage() {
       void qc.invalidateQueries({ queryKey: ["storage_accounts"] });
     },
     onError: (e: Error) => toast.error(e.message),
-  });
-
-  // تصفية السجلات بناءً على شريط البحث
-  const filteredLogs = logs.filter((l: any) => {
-    const searchLower = logSearch.toLowerCase();
-    const dateStr = l.created_at ? new Date(l.created_at).toLocaleString().toLowerCase() : "";
-    return (
-      (l.action || "").toLowerCase().includes(searchLower) ||
-      (l.entity?.toLowerCase() || "").includes(searchLower) ||
-      (l.user?.toLowerCase() || "").includes(searchLower) ||
-      dateStr.includes(searchLower)
-    );
   });
 
   if (!isAdmin) {
@@ -353,8 +363,8 @@ function AdminPage() {
               <Input
                 placeholder="Search logs..."
                 className="pl-8 sm:w-64"
-                value={logSearch}
-                onChange={(e) => setLogSearch(e.target.value)}
+                value={logSearchInput}
+                onChange={(e) => setLogSearchInput(e.target.value)}
               />
             </div>
             <Button variant="outline" onClick={() => window.print()} className="shrink-0">
@@ -381,33 +391,77 @@ function AdminPage() {
             <h3 className="text-xl font-bold text-gray-800 mt-6 text-center">System Activity & Audit Log Report</h3>
           </div>
 
-          {filteredLogs.length === 0 && (
+          {logsLoading ? (
+            <p className="text-sm text-muted-foreground print:text-black">Loading activity logs...</p>
+          ) : logsData?.items?.length === 0 ? (
             <p className="text-sm text-muted-foreground print:text-black">No recorded activity matches your search.</p>
-          )}
-          {filteredLogs.map((l: any, index: number) => (
-            <div key={index} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
-              <div className="flex flex-col">
-                <span className="font-medium print:text-black text-primary">{l.action}</span>
-                <span className="text-muted-foreground print:text-black text-xs mt-1">
-                  <span className="font-bold text-gray-700 mr-1">User:</span>{l.user || "System"}
-                </span>
-              </div>
-              <span className="text-muted-foreground print:text-black mt-2 sm:mt-0 text-right">
-                <div className="font-medium">{l.entity}</div>
-                <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
-              </span>
+          ) : (
+            <div className="space-y-2">
+              {logsData?.items?.map((l: any, index: number) => (
+                <div key={index} className="flex justify-between rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
+                  <div className="flex flex-col">
+                    <span className="font-medium print:text-black text-primary">{l.action}</span>
+                    <span className="text-muted-foreground print:text-black text-xs mt-1">
+                      <span className="font-bold text-gray-700 mr-1">User:</span>{l.user_name || "System"}
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground print:text-black mt-2 sm:mt-0 text-right">
+                    <div className="font-medium">{l.entity}</div>
+                    <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {logsData && logsData.total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-4 mt-4 print:hidden">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Rows per page:</span>
+                <Select 
+                  value={String(logPageSize)} 
+                  onValueChange={(v) => { setLogPageSize(Number(v)); setLogPage(1); }}
+                >
+                  <SelectTrigger className="w-[80px] h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Page {logPage} of {totalLogPages} (Total: {logsData.total})
+                </span>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" size="sm" 
+                    onClick={() => setLogPage(p => Math.max(1, p - 1))} 
+                    disabled={logPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                  </Button>
+                  <Button 
+                    variant="outline" size="sm" 
+                    onClick={() => setLogPage(p => p + 1)} 
+                    disabled={logPage >= totalLogPages}
+                  >
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
-// قم بتحديث المصفوفة لتشمل كافة الأقسام وبنفس المسميات المستخدمة في النظام
 const MODULES = ["history", "exam", "diagnosis", "session", "measurements", "body_chart"] as const;
 
-// قائمة الألوان المتاحة لعلامات الـ Body Chart
 const MARKER_COLORS = [
   { label: "Red", value: "bg-red-500 text-white" },
   { label: "Blue", value: "bg-blue-500 text-white" },
@@ -426,7 +480,6 @@ function ClinicalFieldCatalog() {
   const [module, setModule] = useState<string>("history");
   const [label, setLabel] = useState("");
   const [labelAr, setLabelAr] = useState("");
-  // حالة جديدة للون الخاص بـ Body Chart
   const [markerColor, setMarkerColor] = useState("bg-red-500 text-white");
 
   const { data: fields = [] } = useQuery({
@@ -444,7 +497,6 @@ function ClinicalFieldCatalog() {
 
   const add = useMutation({
     mutationFn: async () => {
-      // إعداد الـ JSON للخيارات الإضافية (مثل اللون)
       const optionsData = module === "body_chart" ? { color: markerColor } : {};
 
       const { error } = await supabase.from("clinical_fields").insert({
@@ -454,7 +506,7 @@ function ClinicalFieldCatalog() {
         field_type: "text",
         is_suggestion: true,
         sort_order: 999,
-        options: optionsData, // حفظ اللون في الداتا بيز
+        options: optionsData,
       });
       if (error) throw error;
     },
@@ -517,7 +569,6 @@ function ClinicalFieldCatalog() {
             />
           </div>
 
-          {/* إظهار اختيار اللون فقط لو القسم هو Body Chart */}
           {module === "body_chart" ? (
             <div className="space-y-1.5">
               <Label>Highlight Color</Label>
@@ -550,7 +601,6 @@ function ClinicalFieldCatalog() {
 
         <div className="max-h-72 space-y-2 overflow-y-auto mt-4">
           {fields.map((f) => {
-            // استخراج اللون من الـ JSONB إن وجد
             const colorClass = (f.options as any)?.color?.split(" ")[0];
             return (
               <div key={f.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
