@@ -1,3 +1,4 @@
+import { PageGuard } from "@/components/PageGuard";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
