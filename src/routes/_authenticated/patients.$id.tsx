@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle } from "lucide-react"; 
+import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle, Eye } from "lucide-react";
 import { toast } from "sonner";
 import {
   Line,
@@ -51,10 +51,11 @@ function PatientDetail() {
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
 
+  // State للتحكم في نافذة التعديل
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
 
-  // متغيرات التحكم في نافذة الحذف النهائي
+  // State للتحكم في نافذة الحذف النهائي
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
@@ -100,28 +101,41 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // تم تحديث هذه الدالة لتنظيف البيانات (Sanitization) قبل إرسالها لتفادي أخطاء الـ Database
   const updatePatientInfo = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("patients").update(editForm).eq("id", id);
+      const payload = {
+        full_name: editForm.full_name,
+        gender: editForm.gender || null,
+        age: editForm.age ? Number(editForm.age) : null,
+        phone: editForm.phone || null,
+        diagnosis: editForm.diagnosis || null,
+        referral_source: editForm.referral_source || null,
+        occupation: editForm.occupation || null,
+        address: editForm.address || null,
+      };
+
+      const { error } = await supabase.from("patients").update(payload).eq("id", id);
       if (error) throw error;
 
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
         action: "UPDATE_PATIENT_PROFILE",
-        entity: `Patient: ${editForm.full_name}`,
-        details: { old_data: patient, new_data: editForm }
+        entity: `Patient: ${payload.full_name}`,
+        details: { old_data: patient, new_data: payload }
       });
     },
     onSuccess: () => {
       toast.success("Patient details updated");
       setEditOpen(false);
       void qc.invalidateQueries({ queryKey: ["patient", id] });
+      void qc.invalidateQueries({ queryKey: ["patients"] }); 
+      void qc.invalidateQueries({ queryKey: ["patients-min"] }); 
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // دالة الحذف النهائي للمريض
   const deletePatient = useMutation({
     mutationFn: async () => {
       if (!user?.email) throw new Error("Email not found");
@@ -149,7 +163,9 @@ function PatientDetail() {
       void qc.invalidateQueries({ queryKey: ["patients"] });
       void navigate({ to: "/patients" });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
   });
 
   const newSession = useMutation({
@@ -249,6 +265,7 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
+      {/* ترويسة الطباعة الاحترافية */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -266,10 +283,18 @@ function PatientDetail() {
 
         <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
           <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
-            <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
+            <div className="flex items-center min-w-0 pr-2">
+              <span className="font-semibold text-gray-500 mr-2 shrink-0">Patient Name:</span> 
+              <span 
+                className="font-bold whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px]"
+                style={{ fontSize: patient.full_name.length > 30 ? '0.9rem' : '1.125rem' }}
+              >
+                {patient.full_name}
+              </span>
+            </div>
+            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
+            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+            <p className="truncate"><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
           </div>
         </div>
       </div>
@@ -324,6 +349,7 @@ function PatientDetail() {
         </div>
       </div>
 
+      {/* نافذة التعديل (Edit Modal) */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
@@ -408,6 +434,7 @@ function PatientDetail() {
         </DialogContent>
       </Dialog>
 
+      {/* نافذة الحذف النهائي (Delete Modal) */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
