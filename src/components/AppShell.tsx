@@ -167,32 +167,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
         
-        {/* Footer الطباعة الثابت (بالستايل المباشر لمنع أي تخريب من المتصفح) */}
+        {/* Footer الطباعة الثابت */}
         <div 
-          className="hidden print-footer" 
+          className="hidden print:flex w-full justify-between items-start pt-3 px-5 bg-white" 
           dir="rtl"
-          style={{
-            display: 'none', /* بيتم تفعيله من ملف الـ css */
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            borderTop: '3px solid #0f766e',
-            paddingTop: '12px',
-            paddingLeft: '20px',
-            paddingRight: '20px',
-            width: '100%',
-            backgroundColor: 'white'
-          }}
+          style={{ borderTop: '3px solid #0f766e' }}
         >
-          <div style={{ textAlign: 'right', flex: 1 }}>
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '15px', color: '#000' }}>Physio Life PT Center</p>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#4b5563' }}>قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
+          <div className="text-right flex-1">
+            <p className="m-0 font-bold text-[15px] text-black">Physio Life PT Center</p>
+            <p className="m-0 mt-1 text-[12px] text-gray-600">قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
           </div>
-          <div style={{ textAlign: 'left', flex: 1 }}>
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#000' }}>للتواصل والحجز</p>
-            <p dir="ltr" style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: 'bold', color: '#4b5563' }}>01050359331</p>
+          <div className="text-left flex-1">
+            <p className="m-0 font-bold text-[14px] text-black">للتواصل والحجز</p>
+            <p dir="ltr" className="m-0 mt-1 text-[13px] font-bold text-gray-600">01050359331</p>
           </div>
         </div>
-
       </div>
 
       {open && (
