@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deniedPages, setDeniedPages] = useState<PageKey[]>([]);
 
   // دالة تحميل بيانات الجلسة والمستخدم
   useEffect(() => {
@@ -41,18 +42,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nextSession?.user) {
         setRoles([]);
         setFullName("");
+        setDeniedPages([]);
         setLoading(false);
         return;
       }
-      const [{ data: roleRows }, { data: profile }] = await Promise.all([
+      const [{ data: roleRows }, { data: profile }, { data: perms }] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", nextSession.user.id),
         supabase.from("profiles").select("full_name").eq("id", nextSession.user.id).maybeSingle(),
+        supabase
+          .from("user_page_permissions")
+          .select("page, allowed")
+          .eq("user_id", nextSession.user.id),
       ]);
       if (!active) return;
       setRoles((roleRows ?? []).map((r) => r.role as AppRole));
       setFullName(profile?.full_name || nextSession.user.email || "");
+      setDeniedPages(
+        (perms ?? []).filter((p) => !p.allowed).map((p) => p.page as PageKey),
+      );
       setLoading(false);
     };
+
 
     supabase.auth.getSession().then(({ data }) => load(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
