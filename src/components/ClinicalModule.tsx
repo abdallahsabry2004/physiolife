@@ -4,13 +4,12 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; // تم استدعاء دالة المراقبة
+import { logActivityAsync } from "@/lib/logger"; 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[cite: 1] تم استيراد المكون الذكي
 
 type Props = {
   patientId: string;
@@ -21,7 +20,6 @@ type Props = {
 };
 
 export function ClinicalModule({ patientId, module, sessionId, title, description }: Props) {
-  // تم إضافة fullName لتوثيق اسم الطبيب الذي قام بالتعديل
   const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
   const [custom, setCustom] = useState("");
@@ -74,7 +72,6 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
       });
       if (error) throw error;
       
-      // توثيق عملية الإضافة في الخلفية
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -91,13 +88,11 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
 
   const saveValue = useMutation({
     mutationFn: async ({ id, value }: { id: string; value: string }) => {
-      // البحث عن القيمة القديمة قبل التعديل لتوثيقها
       const oldRecord = records.find((r) => r.id === id);
       
       const { error } = await supabase.from("patient_records").update({ value }).eq("id", id);
       if (error) throw error;
 
-      // توثيق عملية التعديل مع حفظ النسخة القديمة والجديدة
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -124,7 +119,6 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
       const { error } = await supabase.from("patient_records").delete().eq("id", id);
       if (error) throw error;
 
-      // توثيق عملية الحذف
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -191,14 +185,14 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
               </div>
             </div>
             <div className="flex gap-2">
-              <Input
-                value={custom}
-                placeholder="Or type a custom item…"
-                onChange={(e) => setCustom(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void addCustom();
-                }}
-              />
+              {/*[cite: 1] تم دمج مكوّن الإكمال التلقائي هنا لتسهيل إدخال عنصر مخصص */}
+              <div className="flex-1">
+                 <MedicalAutocomplete
+                  value={custom}
+                  onChange={(val) => setCustom(val)}
+                  placeholder="Or type a custom item…"
+                 />
+              </div>
               <Button onClick={() => void addCustom()}>
                 <Plus className="mr-1 h-4 w-4" /> Add
               </Button>
@@ -214,8 +208,8 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
           </p>
         )}
         {records.map((r) => (
-          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent">
-            <CardContent className="pt-6 print:p-0 print:py-1">
+          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent overflow-visible">
+            <CardContent className="pt-6 print:p-0 print:py-1 overflow-visible">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <Badge variant="secondary" className="print:bg-transparent print:border print:border-gray-300 print:text-black">{r.label}</Badge>
                 {canEditClinical && (
@@ -228,18 +222,29 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                   </button>
                 )}
               </div>
-              <Textarea
-                rows={2}
-                disabled={!canEditClinical}
-                value={drafts[r.id] ?? r.value ?? ""}
-                className="print:text-sm print:leading-relaxed"
-                onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
-                onBlur={(e) => {
-                  if ((r.value ?? "") !== e.target.value) {
-                    saveValue.mutate({ id: r.id, value: e.target.value });
-                  }
-                }}
-              />
+              {/*[cite: 1] تم استبدال الـ Textarea بمكون الاقتراحات الطبية */}
+              {!canEditClinical ? (
+                <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0">
+                  {r.value || "—"}
+                </div>
+              ) : (
+                <div onBlur={(e) => {
+                    // التحقق مما إذا كان التركيز لا يزال داخل المكون لمنع الحفظ المبكر
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                       const currentValue = drafts[r.id] ?? r.value ?? "";
+                       if ((r.value ?? "") !== currentValue) {
+                         saveValue.mutate({ id: r.id, value: currentValue });
+                       }
+                    }
+                  }}
+                >
+                  <MedicalAutocomplete
+                    value={drafts[r.id] ?? r.value ?? ""}
+                    onChange={(val) => setDrafts((d) => ({ ...d, [r.id]: val }))}
+                    placeholder={`Enter ${r.label.toLowerCase()}...`}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
