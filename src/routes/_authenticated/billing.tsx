@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Printer, Trash2, AlertTriangle, DollarSign, History } from "lucide-react";
+import { Plus, Printer, Trash2, AlertTriangle, DollarSign, History, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -50,7 +50,7 @@ function BillingPage() {
   const [payModal, setPayModal] = useState({ open: false, invoice: null as any, amountToPay: "", remaining: 0, type: "full" as "full" | "partial" });
   const [deleteInvoiceModal, setDeleteInvoiceModal] = useState({ open: false, invoice: null as any, password: "" });
   
-  // حالة بيانات الطباعة
+  // حالات بيانات الطباعة وسجل المريض
   const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
 
@@ -62,6 +62,29 @@ function BillingPage() {
     discount: "",
   });
 
+  // -------------------------------------------------------------
+  // إعدادات الـ Pagination والبحث (Server-Side)
+  // -------------------------------------------------------------
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  const [invPage, setInvPage] = useState(1);
+  const [invPageSize, setInvPageSize] = useState(10);
+  
+  const [payPage, setPayPage] = useState(1);
+  const [payPageSize, setPayPageSize] = useState(10);
+
+  // نظام الـ Debounce للبحث التلقائي
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setInvPage(1);
+      setPayPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // جلب قائمة المرضى لاستخدامها في القوائم المنسدلة (Dropdowns)
   const { data: patients = [] } = useQuery({
     queryKey: ["patients-min"],
     queryFn: async () => {
@@ -74,39 +97,106 @@ function BillingPage() {
     },
   });
 
-  const { data: invoices = [] } = useQuery({
-    queryKey: ["invoices"],
+  // 1. الاستعلام المخصص للفواتير مع التقسيم والبحث
+  const { data: invoicesData, isLoading: invLoading } = useQuery({
+    queryKey: ["invoices_paginated", invPage, invPageSize, searchTerm],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = (invPage - 1) * invPageSize;
+      const to = from + invPageSize - 1;
+
+      // نجلب الدفعات المرتبطة بكل فاتورة لحساب الرصيد المتبقي مباشرة
+      let query = supabase
         .from("invoices")
-        .select("*, patients(full_name, code)")
-        .order("created_at", { ascending: false });
+        .select("*, patients!inner(full_name, code), payments(amount)", { count: "exact" });
+
+      if (searchTerm) {
+        query = query.ilike("patients.full_name", `%${searchTerm}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
       if (error) throw error;
-      return data;
+      return { items: data || [], total: count ?? 0 };
     },
+    placeholderData: (prev) => prev,
   });
 
-  const { data: payments = [] } = useQuery({
-    queryKey: ["payments"],
+  // 2. الاستعلام المخصص للمدفوعات مع التقسيم والبحث
+  const { data: paymentsData, isLoading: payLoading } = useQuery({
+    queryKey: ["payments_paginated", payPage, payPageSize, searchTerm],
     queryFn: async () => {
-      // تم إضافة patient_id هنا لحل مشكلة الفلترة في سجل المريض
-      const { data, error } = await supabase
+      const from = (payPage - 1) * payPageSize;
+      const to = from + payPageSize - 1;
+
+      let query = supabase
         .from("payments")
-        .select("id, patient_id, amount, method, paid_on, invoice_id, patients(full_name, code), invoices(*)")
-        .order("created_at", { ascending: false });
+        .select("id, patient_id, amount, method, paid_on, invoice_id, patients!inner(full_name, code), invoices(*)", { count: "exact" });
+
+      if (searchTerm) {
+        query = query.ilike("patients.full_name", `%${searchTerm}%`);
+      }
+
+      const { data, count, error } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
       if (error) throw error;
-      return data;
+      return { items: data || [], total: count ?? 0 };
     },
+    placeholderData: (prev) => prev,
   });
 
+  // 3. الاستعلام المخصص لحساب الإجمالي المتبقي (Total Outstanding) للعيادة كلها
+  const { data: totalOutstanding = 0 } = useQuery({
+    queryKey: ["total_outstanding"],
+    queryFn: async () => {
+      const { data: unpaidInvoices } = await supabase.from("invoices").select("id, total").neq("status", "paid");
+      if (!unpaidInvoices?.length) return 0;
+      
+      const invoiceIds = unpaidInvoices.map((i) => i.id);
+      const { data: relatedPayments } = await supabase.from("payments").select("amount, invoice_id").in("invoice_id", invoiceIds);
+      
+      let total = 0;
+      unpaidInvoices.forEach(inv => {
+         const paid = relatedPayments?.filter(p => p.invoice_id === inv.id).reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+         total += (Number(inv.total) - paid);
+      });
+      return total;
+    }
+  });
+
+  // 4. الاستعلام المخصص لسجل المريض المالي (يعمل فقط عند اختيار مريض)
+  const { data: patientHistory } = useQuery({
+    queryKey: ["patient_billing_history", selectedHistoryPatient],
+    enabled: selectedHistoryPatient !== "all",
+    queryFn: async () => {
+      const [invRes, payRes] = await Promise.all([
+        supabase.from("invoices").select("*, payments(amount)").eq("patient_id", selectedHistoryPatient).order("created_at", { ascending: false }),
+        supabase.from("payments").select("*").eq("patient_id", selectedHistoryPatient).order("created_at", { ascending: false })
+      ]);
+      return { invoices: invRes.data || [], payments: payRes.data || [] };
+    }
+  });
+
+  const totalInvPages = Math.ceil((invoicesData?.total ?? 0) / invPageSize) || 1;
+  const totalPayPages = Math.ceil((paymentsData?.total ?? 0) / payPageSize) || 1;
+
+  // Real-time Sync
   useEffect(() => {
     const channel = supabase
       .channel("realtime-billing")
       .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => {
-        void qc.invalidateQueries({ queryKey: ["invoices"] });
+        void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+        void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+        void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => {
-        void qc.invalidateQueries({ queryKey: ["payments"] });
+        void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
+        void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+        void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+        void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       })
       .subscribe();
 
@@ -144,7 +234,6 @@ function BillingPage() {
       toast.success("Invoice created successfully");
       setOpenInvoiceModal(false);
       setForm({ patient_id: "", description: "", sessions_count: "", subtotal: "", discount: "" });
-      void qc.invalidateQueries({ queryKey: ["invoices"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -184,8 +273,6 @@ function BillingPage() {
     onSuccess: () => {
       toast.success("Payment recorded successfully");
       setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" });
-      void qc.invalidateQueries({ queryKey: ["invoices"] });
-      void qc.invalidateQueries({ queryKey: ["payments"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -217,8 +304,6 @@ function BillingPage() {
     onSuccess: () => {
       toast.success("Invoice and associated payments permanently deleted.");
       setDeleteInvoiceModal({ open: false, invoice: null, password: "" });
-      void qc.invalidateQueries({ queryKey: ["invoices"] });
-      void qc.invalidateQueries({ queryKey: ["payments"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -241,16 +326,13 @@ function BillingPage() {
     },
     onSuccess: () => {
       toast.success("Payment deleted. Invoice status reverted to unpaid.");
-      void qc.invalidateQueries({ queryKey: ["invoices"] });
-      void qc.invalidateQueries({ queryKey: ["payments"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // حساب الرصيد المتبقي معتمداً على المدفوعات المدمجة مع الفاتورة
   const getInvoiceStats = (invoice: any) => {
-    const paidAmount = payments
-      .filter((p) => p.invoice_id === invoice.id)
-      .reduce((sum, p) => sum + Number(p.amount), 0);
+    const paidAmount = (invoice.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
     const remaining = Number(invoice.total) - paidAmount;
     return { paidAmount, remaining };
   };
@@ -264,10 +346,10 @@ function BillingPage() {
 
   const handlePrintHistory = () => {
     const patient = patients.find(p => p.id === selectedHistoryPatient);
-    if (!patient) return;
+    if (!patient || !patientHistory) return;
 
-    const historyInvoicesList = invoices.filter(i => i.patient_id === selectedHistoryPatient);
-    const historyPaymentsList = payments.filter(p => p.patient_id === selectedHistoryPatient);
+    const historyInvoicesList = patientHistory.invoices;
+    const historyPaymentsList = patientHistory.payments;
 
     const totalBilled = historyInvoicesList.reduce((sum, inv) => sum + Number(inv.total), 0);
     const totalPaid = historyPaymentsList.reduce((sum, pay) => sum + Number(pay.amount), 0);
@@ -289,18 +371,6 @@ function BillingPage() {
       window.print();
     }, 100);
   };
-
-  const patientsWithBilling = useMemo(() => {
-    const uniqueIds = Array.from(new Set([...invoices.map(i => i.patient_id), ...payments.map(p => p.patient_id)]));
-    return patients.filter(p => uniqueIds.includes(p.id));
-  }, [invoices, payments, patients]);
-
-  const historyInvoices = selectedHistoryPatient === "all" ? [] : invoices.filter(i => i.patient_id === selectedHistoryPatient);
-  const historyPayments = selectedHistoryPatient === "all" ? [] : payments.filter(p => p.patient_id === selectedHistoryPatient);
-
-  const totalOutstanding = invoices
-    .filter((i) => i.status !== "paid")
-    .reduce((s, i) => s + getInvoiceStats(i).remaining, 0);
 
   return (
     <div className="space-y-6">
@@ -681,13 +751,27 @@ function BillingPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
+            
+            {/* شريط البحث الموحد لتبويب Overview */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9 bg-card"
+                placeholder="Search invoices & payments by patient name..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </div>
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Invoices</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {invoices.length === 0 && <p className="text-sm text-muted-foreground">No invoices yet.</p>}
-                {invoices.map((i) => {
+                {invLoading && <p className="text-sm text-muted-foreground">Loading invoices...</p>}
+                {!invLoading && invoicesData?.items?.length === 0 && <p className="text-sm text-muted-foreground">No invoices found.</p>}
+                
+                {invoicesData?.items?.map((i: any) => {
                   const { paidAmount, remaining } = getInvoiceStats(i);
                   const isPaid = i.status === "paid" || remaining <= 0;
                   
@@ -739,6 +823,35 @@ function BillingPage() {
                     </div>
                   );
                 })}
+
+                {/* أزرار التنقل للفواتير */}
+                {invoicesData && invoicesData.total > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Rows per page:</span>
+                      <Select value={String(invPageSize)} onValueChange={(v) => { setInvPageSize(Number(v)); setInvPage(1); }}>
+                        <SelectTrigger className="w-[70px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">Page {invPage} of {totalInvPages}</span>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setInvPage(p => Math.max(1, p - 1))} disabled={invPage === 1}>
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setInvPage(p => p + 1)} disabled={invPage >= totalInvPages}>
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -747,8 +860,10 @@ function BillingPage() {
                 <CardTitle className="text-base">Recent Payments</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments received yet.</p>}
-                {payments.map((p) => (
+                {payLoading && <p className="text-sm text-muted-foreground">Loading payments...</p>}
+                {!payLoading && paymentsData?.items?.length === 0 && <p className="text-sm text-muted-foreground">No payments found.</p>}
+                
+                {paymentsData?.items?.map((p: any) => (
                   <div key={p.id} className="flex justify-between items-center rounded-lg border p-3 text-sm bg-secondary/10">
                     <div className="flex flex-col">
                       <span className="font-semibold">{(p.patients as any)?.full_name ?? "Patient"}</span>
@@ -781,6 +896,35 @@ function BillingPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* أزرار التنقل للمدفوعات */}
+                {paymentsData && paymentsData.total > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Rows per page:</span>
+                      <Select value={String(payPageSize)} onValueChange={(v) => { setPayPageSize(Number(v)); setPayPage(1); }}>
+                        <SelectTrigger className="w-[70px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">Page {payPage} of {totalPayPages}</span>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPayPage(p => Math.max(1, p - 1))} disabled={payPage === 1}>
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPayPage(p => p + 1)} disabled={payPage >= totalPayPages}>
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -802,7 +946,7 @@ function BillingPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">-- Select a Patient --</SelectItem>
-                        {patientsWithBilling.map(p => (
+                        {patients.map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.full_name} ({p.code})</SelectItem>
                         ))}
                       </SelectContent>
@@ -819,9 +963,9 @@ function BillingPage() {
                   <div className="space-y-6 border-t pt-6">
                     <div>
                       <h4 className="font-bold mb-3">Invoices History</h4>
-                      {historyInvoices.length === 0 ? <p className="text-sm text-muted-foreground">No invoices.</p> : (
+                      {!patientHistory?.invoices || patientHistory.invoices.length === 0 ? <p className="text-sm text-muted-foreground">No invoices.</p> : (
                         <div className="space-y-2">
-                          {historyInvoices.map((i) => {
+                          {patientHistory.invoices.map((i: any) => {
                             const { paidAmount, remaining } = getInvoiceStats(i);
                             const isPaid = i.status === "paid" || remaining <= 0;
                             return (
@@ -841,9 +985,9 @@ function BillingPage() {
                     </div>
                     <div>
                       <h4 className="font-bold mb-3">Payments History</h4>
-                      {historyPayments.length === 0 ? <p className="text-sm text-muted-foreground">No payments.</p> : (
+                      {!patientHistory?.payments || patientHistory.payments.length === 0 ? <p className="text-sm text-muted-foreground">No payments.</p> : (
                         <div className="space-y-2">
-                          {historyPayments.map((p) => (
+                          {patientHistory.payments.map((p: any) => (
                             <div key={p.id} className="flex justify-between items-center border p-3 rounded text-sm bg-secondary/10">
                               <div>
                                 <p className="font-medium">Paid on {p.paid_on}</p>
