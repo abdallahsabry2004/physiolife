@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "super_admin" | "therapist" | "receptionist" | "assistant";
 
+export type PageKey = "dashboard" | "billing" | "analytics";
+export const RESTRICTED_PAGES: PageKey[] = ["dashboard", "billing", "analytics"];
+
 type AuthState = {
   user: User | null;
   session: Session | null;
@@ -13,6 +16,7 @@ type AuthState = {
   isAdmin: boolean;
   canEditClinical: boolean;
   canBill: boolean;
+  canViewPage: (page: PageKey) => boolean;
   signOut: () => Promise<void>;
 };
 
