@@ -377,7 +377,8 @@ function BillingPage() {
     setPrintData({ type, data });
     setTimeout(() => {
       window.print();
-    }, 100);
+      setPrintData(null); // إعادة تعيين البيانات لكي يعمل الفوتر في الطباعات التالية
+    }, 150);
   };
 
   const handlePrintHistory = () => {
@@ -405,14 +406,15 @@ function BillingPage() {
 
     setTimeout(() => {
       window.print();
-    }, 100);
+      setPrintData(null); // إعادة تعيين البيانات لكي يعمل الفوتر في الطباعات التالية
+    }, 150);
   };
 
   return (
     <div className="space-y-6">
       {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
-        <div className="hidden print:block absolute inset-0 bg-white p-8 z-50 min-h-screen">
+        <div className="w-full bg-white pb-8 print:block hidden">
           <div className="border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -594,7 +596,7 @@ function BillingPage() {
       )}
       {/* ---------------------------------------------------------------------------------------- */}
 
-      <div className="print:hidden space-y-6">
+      <div className={printData ? "hidden print:hidden" : "space-y-6"}>
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Billing & Payments</h1>
