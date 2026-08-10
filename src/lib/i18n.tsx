@@ -76,6 +76,15 @@ const dict = {
   "cf.add": { en: "Add suggestion", ar: "إضافة اقتراح" },
   "cf.delete": { en: "Remove", ar: "حذف" },
   "common.save": { en: "Save", ar: "حفظ" },
+
+  // per-user page permissions
+  "perm.denied": { en: "You don't have access to this page.", ar: "لا تملك صلاحية الوصول لهذه الصفحة." },
+  "perm.deniedHint": {
+    en: "Ask a super admin to grant you access from Administration.",
+    ar: "اطلب من المسؤول الأعلى منحك الصلاحية من صفحة الإدارة.",
+  },
+  "perm.button": { en: "Permissions", ar: "الصلاحيات" },
+  "perm.dialogTitle": { en: "Page access permissions", ar: "صلاحيات الوصول للصفحات" },
 } as const;
 
 export type TKey = keyof typeof dict;

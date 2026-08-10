@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logo from "@/assets/physio-life-logo.png";
+import { UserPermissionsDialog } from "@/components/UserPermissionsDialog";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -259,6 +260,12 @@ function AdminPage() {
                   </Badge>
                 ))}
                 
+                <UserPermissionsDialog
+                  userId={s.id}
+                  userName={s.full_name || s.email || ""}
+                  isSuperAdmin={s.roles.includes("super_admin")}
+                />
+
                 {s.is_active ? (
                   <>
                     <Select onValueChange={(v) => setRole.mutate({ userId: s.id, role: v as AppRole })}>

@@ -17,31 +17,41 @@ import {
   ClipboardList,
 } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
-import { useAuth } from "@/lib/auth";
+import { useAuth, type PageKey } from "@/lib/auth";
 import { useI18n, type TKey } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard, page: "dashboard" },
   { to: "/patients", label: "nav.patients", icon: Users },
   { to: "/exercises", label: "nav.exercises", icon: Dumbbell },
   { to: "/questionnaires", label: "nav.questionnaires", icon: ClipboardList },
-  { to: "/billing", label: "nav.billing", icon: Receipt },
+  { to: "/billing", label: "nav.billing", icon: Receipt, page: "billing" },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
-  { to: "/analytics", label: "nav.analytics", icon: BarChart3 },
+  { to: "/analytics", label: "nav.analytics", icon: BarChart3, page: "analytics" },
   { to: "/admin", label: "nav.admin", icon: ShieldCheck, adminOnly: true },
-] as const satisfies readonly { to: string; label: TKey; icon: unknown; adminOnly?: boolean }[];
+] as const satisfies readonly {
+  to: string;
+  label: TKey;
+  icon: unknown;
+  adminOnly?: boolean;
+  page?: PageKey;
+}[];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { fullName, roles, isAdmin, signOut } = useAuth();
+  const { fullName, roles, isAdmin, signOut, canViewPage } = useAuth();
   const { t, lang, setLang } = useI18n();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const items = nav.filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin);
+  const items = nav.filter(
+    (item) =>
+      (!("adminOnly" in item && item.adminOnly) || isAdmin) &&
+      (!("page" in item) || canViewPage(item.page as PageKey)),
+  );
 
   const { data: unread = 0 } = useQuery({
     queryKey: ["notifications-unread"],

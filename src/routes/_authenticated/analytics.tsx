@@ -1,3 +1,4 @@
+import { PageGuard } from "@/components/PageGuard";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,7 +36,11 @@ export const Route = createFileRoute("/_authenticated/analytics")({
       },
     ],
   }),
-  component: AnalyticsPage,
+  component: () => (
+    <PageGuard page="analytics">
+      <AnalyticsPage />
+    </PageGuard>
+  ),
 });
 
 const monthKey = (iso: string) => iso.slice(0, 7);

@@ -1,3 +1,4 @@
+import { PageGuard } from "@/components/PageGuard";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -30,7 +31,11 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       },
     ],
   }),
-  component: Dashboard,
+  component: () => (
+    <PageGuard page="dashboard">
+      <Dashboard />
+    </PageGuard>
+  ),
 });
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
