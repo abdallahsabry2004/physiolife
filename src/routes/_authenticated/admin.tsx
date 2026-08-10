@@ -49,17 +49,20 @@ function AdminPage() {
   const [driveEmail, setDriveEmail] = useState("");
   const [driveFolderId, setDriveFolderId] = useState("");
   
+  // حالات التحكم في البحث وتقسيم الصفحات للسجلات
   const [logSearchInput, setLogSearchInput] = useState("");
   const [logSearchTerm, setLogSearchTerm] = useState("");
   const [logPage, setLogPage] = useState(1);
   const [logPageSize, setLogPageSize] = useState(20);
   
+  // حالة التحكم في نافذة عرض التفاصيل للسجلات
   const [selectedLogDetails, setSelectedLogDetails] = useState<any>(null);
 
+  // نظام الـ Debounce لتحديث كلمة البحث بعد التوقف عن الكتابة لتخفيف الضغط
   useEffect(() => {
     const timer = setTimeout(() => {
       setLogSearchTerm(logSearchInput);
-      setLogPage(1); 
+      setLogPage(1); // العودة للصفحة الأولى عند البحث
     }, 400);
     return () => clearTimeout(timer);
   }, [logSearchInput]);
@@ -104,6 +107,7 @@ function AdminPage() {
     },
   });
 
+  // استعلام ذكي يرسل المتغيرات إلى Google Apps Script ليقوم بالفلترة وتقسيم الصفحات هناك
   const { data: logsData, isLoading: logsLoading } = useQuery({
     queryKey: ["audit_logs", logPage, logPageSize, logSearchTerm],
     enabled: isAdmin && !!GOOGLE_SHEETS_WEBHOOK_URL,
@@ -120,6 +124,7 @@ function AdminPage() {
         if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
         const data = await res.json();
         
+        // إرجاع البيانات والعدد الإجمالي القادم من سيرفرات جوجل
         return { items: data.items || [], total: data.total || 0 };
       } catch (err) {
         console.error(err);
@@ -194,56 +199,22 @@ function AdminPage() {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // المترجم الذكي (Smart Data Formatter) - دالة فك التشفير وتنسيق العرض
-  // --------------------------------------------------------------------------
+  // دالة لفك تشفير وتنسيق الـ JSON الخاص بالتفاصيل
   const renderLogDetails = () => {
-    if (!selectedLogDetails || !selectedLogDetails.details) {
-      return <p className="text-muted-foreground">No extra details available.</p>;
-    }
-
+    if (!selectedLogDetails || !selectedLogDetails.details) return <p className="text-muted-foreground">No extra details available.</p>;
     try {
-      // تحويل النص إلى كائن JSON
       const parsedDetails = typeof selectedLogDetails.details === 'string' 
         ? JSON.parse(selectedLogDetails.details) 
         : selectedLogDetails.details;
         
-      if (Object.keys(parsedDetails).length === 0) {
-        return <p className="text-muted-foreground">No extra details available.</p>;
-      }
+      if (Object.keys(parsedDetails).length === 0) return <p className="text-muted-foreground">No extra details available.</p>;
 
-      // 1. تحديد المفاتيح (Keys) التي لا نريد عرضها للمستخدم (لأنها تقنية بحتة)
-      const ignoredKeys = [
-        'id', 'created_at', 'updated_at', 'deleted_at', 
-        'created_by', 'patient_id', 'invoice_id', 'extra'
-      ];
-
-      // 2. دالة صغيرة لتحسين شكل الأسماء (مثال: full_name -> Full Name)
-      const formatKeyName = (key: string) => {
-        return key
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-      };
-
-      // 3. فلترة البيانات (إزالة المفاتيح المتجاهلة وإزالة القيم الفارغة null أو "")
-      const filteredEntries = Object.entries(parsedDetails).filter(([key, value]) => {
-         return !ignoredKeys.includes(key) && value !== null && value !== "";
-      });
-
-      // إذا كانت العملية لا تحتوي إلا على بيانات تقنية تم فلترتها
-      if (filteredEntries.length === 0) {
-         return <p className="text-sm text-muted-foreground">No readable details for this action.</p>;
-      }
-
-      // 4. عرض البيانات المفلترة في شكل قائمة مرتبة
       return (
         <div className="space-y-2 mt-4 bg-muted/30 p-4 rounded-md border">
-          {filteredEntries.map(([key, value]) => (
-            <div key={key} className="grid grid-cols-[140px_1fr] gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
-              <span className="font-semibold text-muted-foreground text-sm">{formatKeyName(key)}:</span>
-              <span className="text-sm font-medium text-foreground break-words">
-                {/* إذا كانت القيمة كائن بحد ذاته نعرضه كـ JSON، وإلا نعرضه كنص عادي */}
+          {Object.entries(parsedDetails).map(([key, value]) => (
+            <div key={key} className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
+              <span className="font-semibold text-muted-foreground capitalize col-span-1">{key.replace(/_/g, ' ')}:</span>
+              <span className="col-span-2 break-words">
                 {typeof value === 'object' ? JSON.stringify(value) : String(value)}
               </span>
             </div>
@@ -251,7 +222,6 @@ function AdminPage() {
         </div>
       );
     } catch (e) {
-      // وضع احتياطي (Fallback) في حالة كان الـ JSON تالفاً
       return <p className="text-sm text-muted-foreground break-all">{selectedLogDetails.details}</p>;
     }
   };
@@ -459,11 +429,11 @@ function AdminPage() {
           ) : (
             <div className="space-y-2">
               {logsData?.items?.map((l: any, index: number) => (
-                <div key={index} className="flex justify-between items-center rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0 hover:bg-secondary/10 transition-colors">
+                <div key={index} className="flex justify-between items-center rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
                   <div className="flex flex-col flex-1">
                     <span className="font-medium print:text-black text-primary">{l.action}</span>
                     <span className="text-muted-foreground print:text-black text-xs mt-1">
-                      <span className="font-bold text-gray-700 mr-1">User:</span>{l.user_name || l.user || "System"}
+                      <span className="font-bold text-gray-700 mr-1">User:</span>{l.user_name || "System"}
                     </span>
                   </div>
                   <div className="text-muted-foreground print:text-black mt-2 sm:mt-0 flex items-center justify-end gap-3 flex-1 text-right">
@@ -471,7 +441,7 @@ function AdminPage() {
                       <div className="font-medium">{l.entity}</div>
                       <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
                     </div>
-                    {/* زرار العرض مربوط بدالة التفاصيل */}
+                    {/* زرار عرض التفاصيل (Eye) يظهر في الشاشة فقط وليس الطباعة */}
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -530,23 +500,20 @@ function AdminPage() {
         </CardContent>
       </Card>
 
-      {/* نافذة تفاصيل العملية (Log Details Modal) التي تستخدم دالة renderLogDetails */}
+      {/* نافذة تفاصيل العملية (Log Details Modal) */}
       <Dialog open={!!selectedLogDetails} onOpenChange={(open) => !open && setSelectedLogDetails(null)}>
         <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Activity Details</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-1 bg-primary/5 p-3 rounded-md border border-primary/20">
-              <p className="text-sm"><span className="font-semibold text-primary mr-2">Action:</span> {selectedLogDetails?.action}</p>
-              <p className="text-sm"><span className="font-semibold text-primary mr-2">User:</span> {selectedLogDetails?.user_name || selectedLogDetails?.user || "System"}</p>
-              <p className="text-sm"><span className="font-semibold text-primary mr-2">Entity:</span> {selectedLogDetails?.entity}</p>
-              <p className="text-sm"><span className="font-semibold text-primary mr-2">Time:</span> {selectedLogDetails?.created_at ? new Date(selectedLogDetails.created_at).toLocaleString('en-GB') : ""}</p>
+            <div className="grid gap-1">
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Action:</span> {selectedLogDetails?.action}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">User:</span> {selectedLogDetails?.user_name || "System"}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Entity:</span> {selectedLogDetails?.entity}</p>
+              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Time:</span> {selectedLogDetails?.created_at ? new Date(selectedLogDetails.created_at).toLocaleString('en-GB') : ""}</p>
             </div>
-            <div>
-              <h4 className="font-semibold text-sm border-b pb-1 mb-2">Extended Data</h4>
-              {renderLogDetails()}
-            </div>
+            {renderLogDetails()}
           </div>
         </DialogContent>
       </Dialog>
