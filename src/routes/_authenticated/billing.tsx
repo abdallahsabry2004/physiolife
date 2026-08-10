@@ -183,7 +183,7 @@ function BillingPage() {
   const totalInvPages = Math.ceil((invoicesData?.total ?? 0) / invPageSize) || 1;
   const totalPayPages = Math.ceil((paymentsData?.total ?? 0) / payPageSize) || 1;
 
-  // Real-time Sync
+  // Real-time Sync عبر قنوات Supabase
   useEffect(() => {
     const channel = supabase
       .channel("realtime-billing")
@@ -205,6 +205,7 @@ function BillingPage() {
     };
   }, [qc]);
 
+  // إنشاء فاتورة جديدة (مع تحديث الشاشة لحظياً)
   const createInvoice = useMutation({
     mutationFn: async () => {
       const subtotal = Number(form.subtotal || 0);
@@ -234,10 +235,16 @@ function BillingPage() {
       toast.success("Invoice created successfully");
       setOpenInvoiceModal(false);
       setForm({ patient_id: "", description: "", sessions_count: "", subtotal: "", discount: "" });
+      
+      // أمر تحديث الشاشة الفوري (المزامنة)
+      void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
+      void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // استلام دفعة جديدة (مع تحديث الشاشة لحظياً)
   const receivePayment = useMutation({
     mutationFn: async () => {
       const amountPaid = payModal.type === "full" ? payModal.remaining : Number(payModal.amountToPay);
@@ -273,10 +280,17 @@ function BillingPage() {
     onSuccess: () => {
       toast.success("Payment recorded successfully");
       setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" });
+      
+      // أمر تحديث الشاشة الفوري (المزامنة)
+      void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
+      void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // الحذف الآمن للفاتورة (مع تحديث الشاشة لحظياً)
   const secureDeleteInvoice = useMutation({
     mutationFn: async () => {
       if (!user?.email) throw new Error("Email not found");
@@ -304,10 +318,17 @@ function BillingPage() {
     onSuccess: () => {
       toast.success("Invoice and associated payments permanently deleted.");
       setDeleteInvoiceModal({ open: false, invoice: null, password: "" });
+      
+      // أمر تحديث الشاشة الفوري (المزامنة)
+      void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
+      void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // حذف دفعة (مع تحديث الشاشة لحظياً)
   const deletePayment = useMutation({
     mutationFn: async ({ paymentId, invoiceId }: { paymentId: string, invoiceId: string | null }) => {
       const { error } = await supabase.from("payments").delete().eq("id", paymentId);
@@ -326,11 +347,16 @@ function BillingPage() {
     },
     onSuccess: () => {
       toast.success("Payment deleted. Invoice status reverted to unpaid.");
+      
+      // أمر تحديث الشاشة الفوري (المزامنة)
+      void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
+      void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // حساب الرصيد المتبقي معتمداً على المدفوعات المدمجة مع الفاتورة
   const getInvoiceStats = (invoice: any) => {
     const paidAmount = (invoice.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
     const remaining = Number(invoice.total) - paidAmount;
@@ -946,7 +972,7 @@ function BillingPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">-- Select a Patient --</SelectItem>
-                        {patients.map(p => (
+                        {patients.map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>{p.full_name} ({p.code})</SelectItem>
                         ))}
                       </SelectContent>
