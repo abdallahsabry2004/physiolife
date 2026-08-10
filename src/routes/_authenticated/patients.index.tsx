@@ -25,6 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+// استيراد مكوّن الإكمال التلقائي الطبي[cite: 1]
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
 
 export const Route = createFileRoute("/_authenticated/patients/")({
   head: () => ({
@@ -231,10 +233,11 @@ function PatientsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="diagnosis">Working diagnosis</Label>
-                <Input
-                  id="diagnosis"
+                {/* استخدام مكوّن الإكمال التلقائي الطبي بدلاً من Input[cite: 1] */}
+                <MedicalAutocomplete
                   value={form.diagnosis}
-                  onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
+                  onChange={(val) => setForm({ ...form, diagnosis: val })}
+                  placeholder="e.g. Low back pain"
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
