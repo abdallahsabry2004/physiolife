@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, Loader2 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea"; // استخدام Textarea بدلاً من Input
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 interface MedicalAutocompleteProps {
@@ -23,7 +23,7 @@ export function MedicalAutocomplete({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // حالة لتتبع الجملة الحالية التي يكتبها الطبيب ومكانها في النص
+  // حالة لتتبع الكلمات الحالية التي يكتبها الطبيب ومكانها في النص
   const [searchContext, setSearchContext] = useState({ query: "", start: 0, end: 0 });
 
   // إغلاق القائمة المنسدلة عند الضغط في أي مكان خارج المكون
@@ -37,32 +37,33 @@ export function MedicalAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // دالة ذكية لاستخراج الكلمة أو الجملة التي يتم كتابتها حالياً قبل مؤشر الكتابة
+  // 🧠 الدالة الذكية لاستخراج الكلمات التي يتم كتابتها حالياً للبحث عنها
   const updateSearchContext = (target: HTMLTextAreaElement) => {
     const textValue = target.value;
     const cursorPosition = target.selectionStart;
 
-    // استخراج النص من البداية وحتى مكان المؤشر الحالي
+    // 1. أخذ النص من البداية حتى مكان المؤشر الحالي
     const textBeforeCursor = textValue.slice(0, cursorPosition);
     
-    // البحث عن أقرب فاصلة، نقطة، أو سطر جديد لتحديد بداية الجملة الحالية
-    const delimiters = ['\n', ',', '.'];
-    let lastDelimiterIndex = -1;
-    delimiters.forEach(d => {
-      const idx = textBeforeCursor.lastIndexOf(d);
-      if (idx > lastDelimiterIndex) lastDelimiterIndex = idx;
-    });
+    // 2. تقسيم النص بناءً على الفواصل القاطعة للجملة (سطر جديد، نقطة، فاصلة)
+    const delimiters = /[\n,.]/; 
+    const sentences = textBeforeCursor.split(delimiters);
+    const currentSentence = sentences[sentences.length - 1]; // الجملة الحالية
 
-    const startIdx = lastDelimiterIndex + 1;
-    const rawQuery = textBeforeCursor.slice(startIdx);
-    
-    // إزالة المسافات الزائدة من بداية الجملة
-    const spaceOffset = rawQuery.length - rawQuery.trimStart().length;
-    const finalStart = startIdx + spaceOffset;
-    const query = rawQuery.trimStart();
+    // 3. تقسيم الجملة الحالية إلى كلمات بناءً على المسافات (Spaces)
+    const words = currentSentence.split(' ');
+
+    // 4. أخذ آخر 3 كلمات كحد أقصى للبحث (لدعم المصطلحات الطبية المركبة مثل Low back pain)
+    const maxWordsToSearch = 3;
+    const lastWords = words.slice(-maxWordsToSearch).join(' ');
+
+    // 5. حساب نقطة البداية الدقيقة للاستبدال لضمان عدم مسح النص القديم
+    const query = lastWords.trimStart();
+    const finalStart = cursorPosition - query.length;
 
     setSearchContext({ query, start: finalStart, end: cursorPosition });
     
+    // إغلاق القائمة إذا كانت الكلمة أقل من حرفين
     if (query.length < 2) {
       setIsOpen(false);
     }
@@ -88,6 +89,7 @@ export function MedicalAutocomplete({
       return;
     }
 
+    // الانتظار 400 مللي ثانية بعد الكتابة لتقليل الضغط على السيرفر الخارجي
     const delayDebounceFn = setTimeout(async () => {
       setIsLoading(true);
       try {
@@ -106,7 +108,7 @@ export function MedicalAutocomplete({
       } finally {
         setIsLoading(false);
       }
-    }, 400); // 400ms delay to prevent API spam
+    }, 400);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchContext.query]);
@@ -138,13 +140,12 @@ export function MedicalAutocomplete({
           onClick={handleCursorMove}
           onKeyUp={handleCursorMove}
           placeholder={placeholder}
-          className="min-h-[80px] pr-8 leading-relaxed" // مساحة مريحة للكتابة المتعددة الأسطر
+          className="min-h-[80px] pr-8 leading-relaxed" 
         />
         <div className="absolute right-3 top-3 text-muted-foreground pointer-events-none">
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
           ) : (
-             // إخفاء أيقونة البحث لتجنب الزحام، والاكتفاء بمؤشر التحميل فقط
             <Search className="h-4 w-4 opacity-30" />
           )}
         </div>
