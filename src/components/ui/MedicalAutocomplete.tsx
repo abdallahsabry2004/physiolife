@@ -138,15 +138,16 @@ export function MedicalAutocomplete({
              const data = results[i];
              const qInfo = queriesInfo[i];
              
-             if (data && data[3]) {
+             if (data && data[3] && qInfo) {
                 data[3].forEach((item: string[]) => {
                    const text = item[0];
-                   if (!seen.has(text.toLowerCase())) {
+                   if (text && !seen.has(text.toLowerCase())) {
                       seen.add(text.toLowerCase());
                       newSuggestions.push({ text, startIdx: qInfo.startIdx });
                    }
                 });
              }
+
           }
         }
 
