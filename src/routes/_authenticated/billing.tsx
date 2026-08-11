@@ -401,7 +401,7 @@ function BillingPage() {
     <div className="space-y-6">
       {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
-        <div className="isolated-print-container hidden print:block bg-white p-8 min-h-screen">
+        <div className="isolated-print-container hidden print:block bg-white p-8">
           <div className="border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">

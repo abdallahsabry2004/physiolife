@@ -166,8 +166,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         </header>
 
-        <main className="print-shell-main min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
-
         {/* الفوتر الثابت الذي يظهر أسفل كل ورقة مطبوعة */}
         <div
           className="hidden print:flex print-footer w-full items-start justify-between gap-4 border-t-2 border-[#0f766e] px-2 pt-2"
@@ -186,6 +184,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </p>
           </div>
         </div>
+
+        <main className="print-shell-main min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
 
       </div>
 
