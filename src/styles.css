@@ -273,6 +273,17 @@
     display: none !important;
   }
 
+  body.printing-isolated *:has(.isolated-print-container) {
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
   body.printing-isolated .isolated-print-container {
     position: static !important;
     inset: auto !important;
