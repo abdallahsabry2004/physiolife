@@ -214,6 +214,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
       {isPrintingHEP && (
         <div className="isolated-print-container fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
           {/* Header */}
+<div className="h-6"></div>
           <div className="border-b-2 border-primary pb-6 mb-8">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
