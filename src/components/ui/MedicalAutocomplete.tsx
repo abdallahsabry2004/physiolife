@@ -50,7 +50,7 @@ export function MedicalAutocomplete({
     const textBeforeCursor = textValue.slice(0, cursorPosition);
     const delimiters = /[\n,.]/; 
     const sentences = textBeforeCursor.split(delimiters);
-    const currentSentence = sentences[sentences.length - 1];
+    const currentSentence = sentences[sentences.length - 1] ?? "";
 
     const wordRegex = /\S+/g;
     let match;
