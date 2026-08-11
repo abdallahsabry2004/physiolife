@@ -108,6 +108,8 @@ export function MedicalAutocomplete({
         // 1. البحث السريع في مكتبة العضلات (Local Anatomy DB)
         for (let i = lastWords.length; i >= 1; i--) {
           const wordsSubset = lastWords.slice(-i);
+          const firstWord = wordsSubset[0];
+          if (!firstWord) continue;
           const query = wordsSubset.map(w => w.word).join(' ').toLowerCase();
           
           if (query.length >= 2) {
@@ -115,16 +117,17 @@ export function MedicalAutocomplete({
             ANATOMY_LIBRARY.forEach(muscle => {
               if (muscle.toLowerCase().includes(query) && !seen.has(muscle.toLowerCase())) {
                 seen.add(muscle.toLowerCase());
-                newSuggestions.push({ text: muscle, startIdx: wordsSubset[0].index });
+                newSuggestions.push({ text: muscle, startIdx: firstWord.index });
               }
             });
             
             // 2. تجهيز طلبات البحث للمصطلحات الطبية (External API)
-            queriesInfo.push({ query, startIdx: wordsSubset[0].index });
+            queriesInfo.push({ query, startIdx: firstWord.index });
             fetchPromises.push(
               fetch(`https://clinicaltables.nlm.nih.gov/api/conditions/v3/search?terms=${encodeURIComponent(query)}&df=primary_name&maxList=5`).then(r => r.json())
             );
           }
+
         }
 
         // تنفيذ طلبات الـ API الخارجي
