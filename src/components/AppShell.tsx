@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen bg-background print:block print:bg-white">
+    <div className="print-shell flex min-h-screen bg-background print:block print:bg-white">
       <aside
         className={cn(
           "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0 print:hidden",
@@ -75,6 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           "ltr:lg:translate-x-0 rtl:lg:translate-x-0"
         )}
       >
+
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
           <img src={logo} alt="Physio Life" width={40} height={40} className="h-10 w-10" />
           <div>
