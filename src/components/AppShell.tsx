@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen bg-background print:block print:bg-white">
+    <div className="print-shell flex min-h-screen bg-background print:block print:bg-white">
       <aside
         className={cn(
           "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0 print:hidden",
@@ -75,6 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           "ltr:lg:translate-x-0 rtl:lg:translate-x-0"
         )}
       >
+
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
           <img src={logo} alt="Physio Life" width={40} height={40} className="h-10 w-10" />
           <div>
@@ -148,8 +149,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64 print:block print:m-0 print:w-full">
-        <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden print:hidden">
+      <div className="print-shell-content flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64 print:block print:m-0 print:w-full">
+        <header className="print-app-header flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden print:hidden">
           <button onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
@@ -165,21 +166,29 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         </header>
 
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
-        
-        {/* الفوتر النظيف والآمن اللي هيظهر في كل الصفحات */}
-        <div className="hidden print:flex print-footer w-full justify-between items-start border-t-[3px] border-teal-700 pt-3 px-5 bg-white" dir="rtl">
-          <div className="text-right flex-1">
-            <p className="m-0 font-bold text-[15px] text-black">Physio Life PT Center</p>
-            <p className="m-0 mt-1 text-[12px] text-gray-600">قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511</p>
+        <main className="print-shell-main min-w-0 flex-1 p-4 sm:p-6 lg:p-8 print:block print:p-0">{children}</main>
+
+        {/* الفوتر الثابت الذي يظهر أسفل كل ورقة مطبوعة */}
+        <div
+          className="hidden print:flex print-footer w-full items-start justify-between gap-4 border-t-2 border-[#0f766e] px-2 pt-2"
+          dir="rtl"
+        >
+          <div className="flex-1 text-right">
+            <p className="m-0 text-[11pt] font-bold text-black">Physio Life PT Center</p>
+            <p className="m-0 mt-0.5 text-[8pt] leading-snug text-[#4b5563]">
+              قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني, Qena, Egypt, 83511
+            </p>
           </div>
-          <div className="text-left flex-1">
-            <p className="m-0 font-bold text-[14px] text-black">للتواصل والحجز</p>
-            <p dir="ltr" className="m-0 mt-1 text-[13px] font-bold text-gray-600">01050359331</p>
+          <div className="flex-1 text-left">
+            <p className="m-0 text-[9pt] font-bold text-black">للتواصل والحجز</p>
+            <p dir="ltr" className="m-0 mt-0.5 text-[10pt] font-bold text-[#4b5563]">
+              01050359331
+            </p>
           </div>
         </div>
 
       </div>
+
 
       {open && (
         <div
