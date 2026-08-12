@@ -34,7 +34,6 @@ export function PatientExercises({ patientId }: { patientId: string }) {
 
   const [isPrintingHEP, setIsPrintingHEP] = useState(false);
 
-  // كود العزل الذكي لمنع تداخل هيدر المريض العام
   useEffect(() => {
     if (isPrintingHEP) document.body.classList.add("printing-isolated");
     else document.body.classList.remove("printing-isolated");
@@ -210,11 +209,9 @@ export function PatientExercises({ patientId }: { patientId: string }) {
 
   return (
     <>
-      {/* ----------------- قالب طباعة البرنامج المنزلي (HEP) ----------------- */}
       {isPrintingHEP && (
         <div className="isolated-print-container fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
-          {/* Header */}
-<div className="h-6"></div>
+          <div className="h-6"></div>
           <div className="border-b-2 border-primary pb-6 mb-8">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -222,11 +219,17 @@ export function PatientExercises({ patientId }: { patientId: string }) {
                 <div>
                   <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
                   <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                  <div className="mt-1 flex flex-col text-xs text-gray-500">
+                    <span>📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</span>
+                    <span>📞 للتواصل والحجز: 01050359331</span>
+                  </div>
                 </div>
               </div>
               <div className="text-right">
                 <h3 className="text-2xl font-bold text-gray-800 tracking-wider">HOME EXERCISE PROGRAM</h3>
-                <p className="text-gray-500 mt-1">Date: {new Date().toLocaleDateString('en-GB')}</p>
+                <p className="text-gray-500 mt-1">
+                  Date: {new Date().toLocaleString('en-US', { hour12: true, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
                 <p className="text-gray-500">Therapist: {fullName}</p>
               </div>
             </div>
@@ -242,7 +245,6 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             </div>
           </div>
 
-          {/* Guidelines / Tips */}
           <div className="bg-secondary/20 p-4 rounded-lg border border-secondary mb-8 text-sm text-gray-800">
             <p className="font-bold mb-2">💡 Guidelines for your Home Program:</p>
             <ul className="list-disc list-inside space-y-1 ml-2">
@@ -252,7 +254,6 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             </ul>
           </div>
 
-          {/* Exercises List */}
           <div className="space-y-6">
             {assigned.map((pex, index) => (
               <div key={pex.id} className="border-2 border-gray-200 rounded-xl p-5 break-inside-avoid">
@@ -301,17 +302,9 @@ export function PatientExercises({ patientId }: { patientId: string }) {
               </div>
             ))}
           </div>
-
-          {/* Footer */}
-          <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-            <p className="font-semibold text-gray-700 mb-1">Physio Life Physical Therapy Center</p>
-            <p>If you have any questions about your program, please contact the clinic.</p>
-          </div>
         </div>
       )}
-      {/* --------------------------------------------------------------------------------------- */}
 
-      {/* الواجهة العادية المخفية أثناء الطباعة */}
       <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
@@ -379,7 +372,6 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             <Badge variant="secondary">{doneCount} completions total</Badge>
           </div>
           
-          {/* زر الطباعة للبرنامج المنزلي */}
           {assigned.length > 0 && (
             <Button variant="outline" onClick={handlePrintProgram} className="shrink-0">
               <Printer className="mr-2 h-4 w-4" /> Print HEP Sheet
@@ -470,5 +462,3 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     </>
   );
 }
-
-
