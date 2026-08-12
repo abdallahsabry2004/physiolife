@@ -119,26 +119,32 @@
   --sidebar-ring: oklch(0.76 0.14 72);
 }
 
+
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+
 }
 
 /* =========================================
-   إعدادات الطباعة الاحترافية (A4 - الجدول السحري)
+   إعدادات الطباعة الاحترافية (A4 - كل الأجهزة)
    ========================================= */
 @media print {
   @page {
     size: A4 portrait;
-    /* هوامش عادية جداً ومتساوية للورقة، لا يوجد مسافات سالبة */
-    margin: 10mm;
+    /* مسافات متساوية ومريحة تترك الكلام ينساب لنهاية الورقة بحرية */
+    margin: 12mm;
   }
 
-  html, body {
+  html,
+  body {
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
@@ -147,53 +153,108 @@
     color: #000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     font-size: 11pt;
+    line-height: 1.45;
   }
 
-  aside, nav, header.print-app-header, .print\:hidden, [data-print-hide], button:not(.print-keep) {
+  /* إخفاء عناصر الواجهة (قوائم/أزرار/إشعارات) */
+  aside,
+  nav,
+  header.print-app-header,
+  .print\:hidden,
+  [data-print-hide] {
     display: none !important;
   }
 
-  body.printing-isolated *:not(.isolated-print-container):not(.isolated-print-container *):not(.print-footer):not(.print-footer *) {
+  button:not(.print-keep) {
     display: none !important;
   }
 
-  body.printing-isolated .isolated-print-container {
+  .print-shell,
+  .print-shell-content,
+  .print-shell-main {
     display: block !important;
     position: static !important;
+    float: none !important;
     width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: white;
+    inset: auto !important;
+    transform: none !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
 
-  /* الفوتر الثابت في أسفل الورقة */
-  .print-footer {
-    display: flex !important;
-    position: fixed !important;
-    bottom: 0 !important; /* ملتصق بالقاع */
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    height: 25mm !important; /* الارتفاع مطابق للمساحة المحجوزة في tfoot */
-    background-color: #fff !important;
-    border-top: 2px solid var(--color-primary);
-    padding-top: 5mm;
-    justify-content: flex-start;
-    align-items: center;
-    flex-direction: column;
-    z-index: 999999 !important;
-  }
-
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     box-shadow: none !important;
     text-shadow: none !important;
     animation: none !important;
     transition: none !important;
   }
 
-  h1, h2, h3, h4 { break-after: avoid-page; page-break-after: avoid; }
-  tr, img, .break-inside-avoid, .card { break-inside: avoid; page-break-inside: avoid; }
+  img,
+  svg,
+  canvas {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  h1, h2, h3, h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  tr,
+  img,
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة فقط */
+  body.printing-isolated * {
+    visibility: hidden;
+  }
+  body.printing-isolated .isolated-print-container,
+  body.printing-isolated .isolated-print-container * {
+    visibility: visible;
+  }
+
+  /* إزالة مساحات عناصر الشاشة من مسار قالب الطباعة المعزول */
+  body.printing-isolated *:has(.isolated-print-container)
+    > :not(:has(.isolated-print-container)):not(.isolated-print-container) {
+    display: none !important;
+  }
+
+  body.printing-isolated *:has(.isolated-print-container) {
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-isolated .isolated-print-container {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
 
   textarea {
     height: auto !important;
@@ -206,4 +267,4 @@
     color: #000 !important;
     background: transparent !important;
   }
-  }
+}
