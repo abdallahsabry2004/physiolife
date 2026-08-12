@@ -249,7 +249,7 @@
     bottom: 0 !important;
     
     /* الخدعة السحرية: سحب الفوتر بصرياً للأسفل بقيمة 25mm ليكون في المساحة البيضاء ولا يتلامس مع النص إطلاقاً */
-    transform: translateY(15mm) !important;
+    transform: translateY(5mm) !important;
     
     inset-inline: 0 !important;
     left: 0 !important;
