@@ -58,7 +58,6 @@ function BillingPage() {
   const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
 
-  // كود العزل الذكي لمنع تداخل هيدر الفاتورة
   useEffect(() => {
     if (printData) document.body.classList.add("printing-isolated");
     else document.body.classList.remove("printing-isolated");
@@ -364,8 +363,8 @@ function BillingPage() {
     setPrintData({ type, data });
     setTimeout(() => {
       window.print();
-      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
-    }, 150);
+      setPrintData(null);
+    }, 300);
   };
 
   const handlePrintHistory = () => {
@@ -393,39 +392,36 @@ function BillingPage() {
 
     setTimeout(() => {
       window.print();
-      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
-    }, 150);
+      setPrintData(null);
+    }, 300);
   };
 
   return (
     <div className="space-y-6">
-      {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
-        <div className="isolated-print-container hidden print:block bg-white p-8">
-          <div className="border-b-2 border-primary pb-6 mb-6">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <img src={logo} alt="Physio Life" className="h-20 w-20" />
-                <div>
-                  <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
-                </div>
+        <div className="isolated-print-container hidden print:block bg-white p-0">
+          <div className="print-header flex justify-between items-start">
+            <div className="flex items-center gap-4">
+              <img src={logo} alt="Physio Life" className="h-16 w-16" />
+              <div>
+                <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+                <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
               </div>
-              <div className="text-right">
-                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">
-                  {printData.type === 'invoice' && 'INVOICE STATEMENT'}
-                  {printData.type === 'payment' && 'PAYMENT RECEIPT'}
-                  {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
-                </h3>
-                {printData.type !== 'history' && (
-                  <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
-                )}
-                <p className="text-gray-500">Date: {new Date().toLocaleDateString('en-GB')}</p>
-              </div>
+            </div>
+            <div className="text-right text-xs text-gray-500 space-y-1">
+              <h3 className="text-lg font-bold text-gray-800 tracking-wider mb-1">
+                {printData.type === 'invoice' && 'INVOICE STATEMENT'}
+                {printData.type === 'payment' && 'PAYMENT RECEIPT'}
+                {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
+              </h3>
+              {printData.type !== 'history' && (
+                <p><span className="font-semibold text-gray-700">No:</span> #{printData.data.id.split('-')[0]}</p>
+              )}
+              <p><span className="font-semibold text-gray-700">Date:</span> {new Date().toLocaleDateString('en-GB')}</p>
             </div>
           </div>
 
-          <div className="mt-8 space-y-6">
+          <div className="mt-4 space-y-6">
             <div className="flex justify-between border-b pb-4">
               <div>
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
@@ -458,7 +454,7 @@ function BillingPage() {
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center p-4 border rounded-lg">
+                <div className="flex justify-between items-center p-4 border rounded-lg break-inside-avoid">
                   <div>
                     <p className="text-sm text-gray-500">Paid Amount</p>
                     <p className="font-bold text-lg text-green-600">EGP {getInvoiceStats(printData.data).paidAmount.toLocaleString()}</p>
@@ -486,7 +482,7 @@ function BillingPage() {
                 </div>
 
                 {printData.data.invoices && (
-                  <div className="p-4 border rounded-lg text-sm">
+                  <div className="p-4 border rounded-lg text-sm break-inside-avoid">
                     <h5 className="font-bold mb-2">Applied To Invoice:</h5>
                     <p><span className="text-gray-500">Description:</span> {printData.data.invoices.description || "General"}</p>
                     <p><span className="text-gray-500">Invoice Total:</span> EGP {Number(printData.data.invoices.total).toLocaleString()}</p>
@@ -497,7 +493,7 @@ function BillingPage() {
 
             {printData.type === 'history' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 break-inside-avoid">
                   <div className="p-4 border rounded-lg text-center bg-gray-50">
                     <p className="text-sm text-gray-500">Total Billed</p>
                     <p className="text-xl font-bold text-primary">EGP {printData.data.totalBilled.toLocaleString()}</p>
@@ -512,7 +508,7 @@ function BillingPage() {
                   </div>
                 </div>
 
-                <div>
+                <div className="break-inside-avoid">
                   <h4 className="font-bold text-lg border-b pb-2 mb-4">Invoices Summary</h4>
                   <table className="w-full text-sm text-left">
                     <thead>
@@ -536,7 +532,7 @@ function BillingPage() {
                   </table>
                 </div>
 
-                <div>
+                <div className="break-inside-avoid">
                   <h4 className="font-bold text-lg border-b pb-2 mb-4">Payments Summary</h4>
                   <table className="w-full text-sm text-left">
                     <thead>
@@ -560,7 +556,7 @@ function BillingPage() {
               </div>
             )}
 
-            <div className="mt-16 pt-8 border-t border-dashed flex justify-between items-end">
+            <div className="mt-12 pt-8 border-t border-dashed flex justify-between items-end break-inside-avoid">
               <div>
                 <p className="text-sm text-gray-500 mb-2">Issued By (Staff)</p>
                 <p className="font-bold text-lg">{fullName}</p>
@@ -570,15 +566,15 @@ function BillingPage() {
                 <p className="text-sm text-gray-500">Authorized Signature</p>
               </div>
             </div>
-            
-            <div className="mt-12 text-center text-xs text-gray-400">
-              <p>Thank you for choosing Physio Life PT Center.</p>
-              <p>This is a computer-generated document and does not require a physical stamp.</p>
-            </div>
+          </div>
+
+          <div className="print-footer">
+            <p className="font-bold">Physio Life Physical Therapy Center</p>
+            <p>123 Clinic Address Street, City, Country | Phone: +123456789 | Email: info@physiolife.com</p>
+            <p className="text-xs mt-1">This is a computer-generated document and does not require a physical stamp.</p>
           </div>
         </div>
       )}
-      {/* ---------------------------------------------------------------------------------------- */}
 
       <div className={printData ? "hidden" : "space-y-6"}>
         <header className="flex flex-wrap items-center justify-between gap-4">
@@ -771,7 +767,6 @@ function BillingPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
-            
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
