@@ -145,16 +145,18 @@
     font-family: var(--font-sans);
   }
 
-}
-
+}  
 /* =========================================
    إعدادات الطباعة الاحترافية (A4 - كل الأجهزة)
    ========================================= */
 @media print {
   @page {
     size: A4 portrait;
-    /* المسافة السفلية تحجز مكان الفوتر الثابت */
-    margin: 12mm 12mm 25mm 12mm;
+    /* 
+       1. الحد المنيع للنص: 
+       نحجز مسافة 35mm في أسفل الصفحة مستحيل النص يتخطاها.
+    */
+    margin: 12mm 12mm 35mm 12mm;
   }
 
   html,
@@ -186,7 +188,7 @@
     display: none !important;
   }
 
-  /* تصفير تخطيط الشل حتى لا يعتمد على مقاس الشاشة (موبايل/تابلت/ديسكتوب) */
+  /* تصفير تخطيط الشل حتى لا يعتمد على مقاس الشاشة */
   .print-shell,
   .print-shell-content,
   .print-shell-main {
@@ -238,23 +240,26 @@
     page-break-inside: avoid;
   }
 
-  /* الفوتر الثابت أسفل كل ورقة داخل هامش الصفحة */
+  /* 
+     2. الفوتر الثابت أسفل كل ورقة 
+  */
   .print-footer {
     display: flex !important;
     position: fixed !important;
-    bottom: -5mm !important;
+    bottom: 0 !important;
+    
+    /* الخدعة السحرية: سحب الفوتر بصرياً للأسفل بقيمة 25mm ليكون في المساحة البيضاء ولا يتلامس مع النص إطلاقاً */
+    transform: translateY(25mm) !important;
+    
     inset-inline: 0 !important;
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
-    min-height: 15mm;
+    min-height: 16mm;
     background-color: #fff !important;
     break-inside: avoid;
     page-break-inside: avoid;
     z-index: 999999 !important;
-    /* تنسيقات إضافية لضمان الشكل الاحترافي للفوتر */
-    padding-bottom: 5mm; 
-    border-top: 2px solid var(--color-primary); /* خط يفصل الفوتر بصرياً */
   }
 
   /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة والفوتر فقط */
@@ -312,6 +317,3 @@
     background: transparent !important;
   }
 }
-
-
-
