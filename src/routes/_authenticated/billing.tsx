@@ -575,14 +575,15 @@ function BillingPage() {
                 <p className="text-sm text-gray-500">Authorized Signature</p>
               </div>
             </div>
-             <div className="mt-12 text-center text-xs text-gray-400">
+
+            <div className="mt-12 text-center text-xs text-gray-400">
               <p>Thank you for choosing Physio Life PT Center.</p>
               <p>This is a computer-generated document and does not require a physical stamp.</p>
             </div>
           </div>
         </div>
       )}
-      
+
       <div className={printData ? "hidden" : "space-y-6 print:hidden"}>
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
