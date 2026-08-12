@@ -3,14 +3,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { logActivityAsync } from "@/lib/logger";
@@ -60,8 +53,11 @@ function PatientDetail() {
   const [isPrintingProfile, setIsPrintingProfile] = useState(false);
 
   useEffect(() => {
-    if (isPrintingProfile) document.body.classList.add("printing-isolated");
-    else document.body.classList.remove("printing-isolated");
+    if (isPrintingProfile) {
+        document.body.classList.add("printing-isolated");
+    } else {
+        document.body.classList.remove("printing-isolated");
+    }
     return () => document.body.classList.remove("printing-isolated");
   }, [isPrintingProfile]);
 
@@ -272,7 +268,7 @@ function PatientDetail() {
     setTimeout(() => {
       window.print();
       setIsPrintingProfile(false);
-    }, 300);
+    }, 500); // زيادة وقت الانتظار قليلاً لضمان التصيير الكامل
   };
 
   if (!patient) return <p className="text-sm text-muted-foreground">Loading record…</p>;
@@ -280,29 +276,32 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
+      {/* قسم الطباعة المعزول - لا يظهر إلا أثناء الطباعة */}
       {isPrintingProfile && (
-        <div className="isolated-print-container hidden print:block bg-white p-0">
+        <div className="isolated-print-container hidden print:block w-full">
           
-          <div className="print-header flex justify-between items-start">
-            <div className="flex items-center gap-4">
-              <img src={logo} alt="Physio Life" className="h-16 w-16" />
-              <div>
-                <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
-                <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+          <div className="border-b-2 border-primary pb-6 mb-6">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-16 w-16" />
+                <div>
+                  <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                </div>
+              </div>
+              <div className="text-right text-xs text-gray-500 space-y-1">
+                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
+                <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
               </div>
             </div>
-            <div className="text-right text-xs text-gray-500 space-y-1">
-              <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
-              <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
-            </div>
-          </div>
 
-          <div className="mt-4 rounded-xl border-2 border-gray-200 p-4 mb-6">
-            <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
-              <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
-              <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
-              <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-              <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
+            <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
+              <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
+                <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
+                <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
+                <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+                <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
+              </div>
             </div>
           </div>
 
@@ -321,16 +320,17 @@ function PatientDetail() {
              </div>
           </div>
 
-          <div className="print-footer">
-            <p className="font-bold">Physio Life Physical Therapy Center</p>
-            <p>123 Clinic Address Street, City, Country | Phone: +123456789 | Email: info@physiolife.com</p>
-            <p className="text-xs mt-1">This is an official medical record generated by the clinic.</p>
+          <div className="print-footer hidden print:flex">
+            <p className="font-bold text-gray-800">Physio Life Physical Therapy Center</p>
+            <p className="text-gray-600">Phone: +123456789 | Email: info@physiolife.com</p>
+            <p className="text-xs text-gray-400 mt-1">Official Medical Record</p>
           </div>
           
         </div>
       )}
 
-      <div className={isPrintingProfile ? "hidden" : "block"}>
+      {/* الواجهة الرئيسية - يتم إخفاؤها بالكامل أثناء الطباعة */}
+      <div className={isPrintingProfile ? "hidden" : "block print:hidden"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link to="/patients" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -529,7 +529,7 @@ function PatientDetail() {
 
           <TabsContent value="sessions" className="mt-6 space-y-4">
             {canEditClinical && (
-              <Button onClick={() => newSession.mutate()} className="print:hidden">
+              <Button onClick={() => newSession.mutate()}>
                 <Plus className="mr-2 h-4 w-4" /> Open a new visit
               </Button>
             )}
@@ -537,14 +537,14 @@ function PatientDetail() {
               <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
             )}
             {sessions.map((s) => (
-              <Card key={s.id} className="print:mb-4 overflow-visible break-inside-avoid">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 print:pb-1">
-                  <CardTitle className="text-base font-bold text-primary print:text-black">
+              <Card key={s.id} className="overflow-visible break-inside-avoid">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-base font-bold text-primary">
                     Session #{s.session_number} · {s.session_date}
                   </CardTitle>
                   {canEditClinical && (
                     <Button
-                      variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive print:hidden"
+                      variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive"
                       onClick={() => {
                         if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
                           deleteSession.mutate(s.id);
@@ -555,52 +555,46 @@ function PatientDetail() {
                     </Button>
                   )}
                 </CardHeader>
-                <CardContent className="space-y-4 print:space-y-2 overflow-visible">
+                <CardContent className="space-y-4 overflow-visible">
                   <div className="grid gap-4 md:grid-cols-2">
                     {(["subjective", "objective", "assessment", "plan"] as const).map((k) => (
-                      <div key={k} className="space-y-2 print:space-y-0 relative">
+                      <div key={k} className="space-y-2 relative">
                         <Label className="capitalize font-bold text-gray-700">{k}</Label>
                         {!canEditClinical ? (
-                          <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0 whitespace-pre-wrap break-words">
+                          <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent whitespace-pre-wrap break-words">
                             {s[k] || "—"}
                           </div>
                         ) : (
-                          <>
-                            <div 
-                              className="print:hidden"
-                              onBlur={(e) => {
-                                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                  const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
-                                  if ((s[k] ?? "") !== draftValue) {
-                                    updateSession.mutate({ sid: s.id, patch: { [k]: draftValue } });
-                                  }
+                          <div 
+                            onBlur={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
+                                if ((s[k] ?? "") !== draftValue) {
+                                  updateSession.mutate({ sid: s.id, patch: { [k]: draftValue } });
                                 }
-                              }}
-                            >
-                              <MedicalAutocomplete
-                                value={sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? ""}
-                                onChange={(val) => setSessionDrafts(prev => ({ ...prev, [`${s.id}-${k}`]: val }))}
-                                placeholder={`Enter ${k} notes...`}
-                              />
-                            </div>
-                            <div className="hidden print:block text-sm p-0 border-none whitespace-pre-wrap break-words text-black">
-                              {sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "—"}
-                            </div>
-                          </>
+                              }
+                            }}
+                          >
+                            <MedicalAutocomplete
+                              value={sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? ""}
+                              onChange={(val) => setSessionDrafts(prev => ({ ...prev, [`${s.id}-${k}`]: val }))}
+                              placeholder={`Enter ${k} notes...`}
+                            />
+                          </div>
                         )}
                       </div>
                     ))}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 pt-2">
-                    <div className="space-y-2 print:space-y-0">
+                  <div className="grid gap-4 sm:grid-cols-3 pt-2">
+                    <div className="space-y-2">
                       <Label className="font-bold text-gray-700">Pain before (0-10)</Label>
                       <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_before ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_before: e.target.value ? Number(e.target.value) : null } })} />
                     </div>
-                    <div className="space-y-2 print:space-y-0">
+                    <div className="space-y-2">
                       <Label className="font-bold text-gray-700">Pain after (0-10)</Label>
                       <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_after ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_after: e.target.value ? Number(e.target.value) : null } })} />
                     </div>
-                    <div className="space-y-2 print:space-y-0">
+                    <div className="space-y-2">
                       <Label className="font-bold text-gray-700">Duration (min)</Label>
                       <Input type="number" disabled={!canEditClinical} defaultValue={s.duration_minutes ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { duration_minutes: e.target.value ? Number(e.target.value) : null } })} />
                     </div>
