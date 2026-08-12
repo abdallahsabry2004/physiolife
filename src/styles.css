@@ -4,8 +4,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
 @theme inline {
-  /* ... (نفس متغيرات الألوان لم تتغير) ... */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -53,7 +66,6 @@
   --font-sans: "Plus Jakarta Sans", "Cairo", system-ui, sans-serif;
   --background: oklch(0.985 0.005 200);
   --foreground: oklch(0.22 0.03 235);
-  /* ... باقي ألوان الـ root ... */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.03 235);
   --popover: oklch(1 0 0);
@@ -71,12 +83,24 @@
   --border: oklch(0.9 0.014 210);
   --input: oklch(0.9 0.014 210);
   --ring: oklch(0.48 0.083 213);
+  --chart-1: oklch(0.48 0.083 213);
+  --chart-2: oklch(0.76 0.14 72);
+  --chart-3: oklch(0.62 0.1 175);
+  --chart-4: oklch(0.55 0.12 285);
+  --chart-5: oklch(0.65 0.16 25);
+  --sidebar: oklch(0.28 0.045 225);
+  --sidebar-foreground: oklch(0.95 0.01 210);
+  --sidebar-primary: oklch(0.76 0.14 72);
+  --sidebar-primary-foreground: oklch(0.22 0.04 60);
+  --sidebar-accent: oklch(0.34 0.05 225);
+  --sidebar-accent-foreground: oklch(0.97 0.01 210);
+  --sidebar-border: oklch(0.36 0.04 225);
+  --sidebar-ring: oklch(0.76 0.14 72);
 }
 
 .dark {
   --background: oklch(0.19 0.028 235);
   --foreground: oklch(0.96 0.008 210);
-  /* ... باقي ألوان الـ dark ... */
   --card: oklch(0.24 0.032 232);
   --card-foreground: oklch(0.96 0.008 210);
   --popover: oklch(0.24 0.032 232);
@@ -94,26 +118,197 @@
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.7 0.1 200);
+  --chart-1: oklch(0.7 0.1 200);
+  --chart-2: oklch(0.76 0.14 72);
+  --chart-3: oklch(0.72 0.1 175);
+  --chart-4: oklch(0.68 0.12 285);
+  --chart-5: oklch(0.7 0.16 25);
+  --sidebar: oklch(0.22 0.03 233);
+  --sidebar-foreground: oklch(0.95 0.01 210);
+  --sidebar-primary: oklch(0.76 0.14 72);
+  --sidebar-primary-foreground: oklch(0.2 0.04 60);
+  --sidebar-accent: oklch(0.3 0.035 230);
+  --sidebar-accent-foreground: oklch(0.96 0.008 210);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.76 0.14 72);
 }
 
+
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+
 }
 
-/* كلاس لمنع قص العناصر المهمة أثناء التصدير للـ PDF */
-.break-inside-avoid {
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
+/* =========================================
+   إعدادات الطباعة الاحترافية (A4 - كل الأجهزة)
+   ========================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    /* المسافة السفلية تحجز مكان الفوتر الثابت */
+    margin: 12mm 12mm 30mm 12mm;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+
+  /* إخفاء عناصر الواجهة (قوائم/أزرار/إشعارات) */
+  aside,
+  nav,
+  header.print-app-header,
+  .print\:hidden,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  button:not(.print-keep) {
+    display: none !important;
+  }
+
+  /* تصفير تخطيط الشل حتى لا يعتمد على مقاس الشاشة (موبايل/تابلت/ديسكتوب) */
+  .print-shell,
+  .print-shell-content,
+  .print-shell-main {
+    display: block !important;
+    position: static !important;
+    float: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    inset: auto !important;
+    transform: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* منع الظلال والحدود الملوّنة الزائدة */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  img,
+  svg,
+  canvas {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  /* نظافة تقسيم الصفحات */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  tr,
+  img,
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* الفوتر الثابت أسفل كل ورقة داخل هامش الصفحة */
+  .print-footer {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0mm !important;
+    inset-inline: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-height: 16mm;
+    background-color: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    z-index: 999999 !important;
+  }
+
+  /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة والفوتر فقط */
+  body.printing-isolated * {
+    visibility: hidden;
+  }
+  body.printing-isolated .isolated-print-container,
+  body.printing-isolated .isolated-print-container * {
+    visibility: visible;
+  }
+  body.printing-isolated .print-footer,
+  body.printing-isolated .print-footer * {
+    visibility: visible;
+  }
+
+  /* إزالة مساحات عناصر الشاشة من مسار قالب الطباعة المعزول بدل إخفائها بصرياً فقط */
+  body.printing-isolated *:has(.isolated-print-container)
+    > :not(:has(.isolated-print-container)):not(.isolated-print-container):not(.print-footer) {
+    display: none !important;
+  }
+
+  body.printing-isolated *:has(.isolated-print-container) {
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-isolated .isolated-print-container {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* إجبار مربعات النصوص (Textarea) على إظهار النص بالكامل وعدم قصه */
+  textarea {
+    height: auto !important;
+    min-height: fit-content !important;
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    border: none !important;
+    resize: none !important;
+    padding: 0 !important;
+    color: #000 !important;
+    background: transparent !important;
+  }
 }
 
-/* ضمان أن الرسوم البيانية تأخذ مساحة ثابتة لتلتقطها مكتبة PDF */
-.pdf-chart-container {
-  width: 100%;
-  min-height: 400px;
-  display: block;
-}
+
+
