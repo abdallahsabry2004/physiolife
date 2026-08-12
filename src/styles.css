@@ -4,6 +4,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -119,96 +133,317 @@
   --sidebar-ring: oklch(0.76 0.14 72);
 }
 
+
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+
 }
 
 /* =========================================
-   إعدادات الطباعة الصارمة والمنظمة
+   إعدادات الطباعة الاحترافية (A4 - كل الأجهزة)
+   =========================================
+
+   الفكرة الأساسية:
+   1) نحجز مساحة فارغة أعلى وأسفل كل ورقة عبر @page margin بنفس ارتفاع
+      الهيدر/الفوتر بالضبط (المعرّفين كمتغيرات أدناه).
+   2) الهيدر والفوتر عبارة عن عنصرين position: fixed. عند الطباعة،
+      المتصفح "يلصقهما" في نفس المكان على كل صفحة تلقائيًا (Chrome,
+      Edge, Firefox, وWebKit الحديث كلها تدعم تكرار position: fixed
+      في كل صفحة مطبوعة) — فيظهران في كل ورقة بدون أي كود جافاسكربت.
+   3) لأن الهامش محجوز فعليًا في @page، فإن أي محتوى عادي (فقرات،
+      جداول، بطاقات) لا يمكن أن "يدخل" تحت الفوتر أو فوق الهيدر أبدًا؛
+      المتصفح نفسه يكسر الصفحة قبل الوصول لتلك المنطقة.
+   4) ارتفاع الهيدر/الفوتر ثابت ومضبوط عن قصد (سطر واحد بدون التفاف
+      نص) — هذا ضروري حتى يبقى الهامش المحجوز في @page مطابقًا دائمًا
+      لما يُعرض فعليًا، ولا يحدث تراكب أبدًا مهما اختلف طول اسم
+      المريض أو نوع المستند.
    ========================================= */
+
+:root {
+  --print-header-h: 24mm;
+  --print-footer-h: 15mm;
+  --print-margin-x: 12mm;
+  --print-gap: 6mm;
+  --print-accent: #1c5d78;
+}
+
+/* مخفيان دائمًا على الشاشة؛ يظهران فقط داخل @media print أدناه */
+.print-page-header,
+.print-page-footer {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;
-    margin: 15mm; /* مساحة هوامش متوازنة للورقة */
+    /* الهامش = ارتفاع الهيدر/الفوتر + مسافة أمان صغيرة، حتى لا يلمس
+       المحتوى العادي الهيدر أو الفوتر أبدًا */
+    margin:
+      calc(var(--print-header-h) + var(--print-gap))
+      var(--print-margin-x)
+      calc(var(--print-footer-h) + var(--print-gap))
+      var(--print-margin-x);
   }
 
-  html, body, #root {
+  html,
+  body {
     width: 100% !important;
-    height: auto !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
     color: #000 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    font-size: 12pt !important;
-    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: 11pt;
+    line-height: 1.45;
   }
 
-  /* إخفاء القوائم والشريط الجانبي وأي أزرار */
-  aside, nav, header.print-app-header, .print\:hidden, [data-print-hide], button:not(.print-keep) {
+  /* إخفاء عناصر الواجهة (قوائم/أزرار/إشعارات) */
+  aside,
+  nav,
+  header.print-app-header,
+  .print\:hidden,
+  [data-print-hide] {
     display: none !important;
   }
 
-  /* تحويل الحاويات الأساسية إلى كتل لضمان عدم اختلال التخطيط */
-  .print-shell,
-  .print-shell-content,
-  .print-shell-main,
-  .isolated-print-container {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-    margin: 0 !important;
-    padding: 0 !important;
+  button:not(.print-keep) {
+    display: none !important;
   }
 
-  /* منع الظلال والأنيميشن لتخفيف الحمل على المتصفح وقت الطباعة */
-  *, *::before, *::after {
+  /* تصفير تخطيط الشل حتى لا يعتمد على مقاس الشاشة (موبايل/تابلت/ديسكتوب) */
+  .print-shell,
+  .print-shell-content,
+  .print-shell-main {
+    display: block !important;
+    position: static !important;
+    float: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    inset: auto !important;
+    transform: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* منع الظلال والحدود الملوّنة الزائدة */
+  *,
+  *::before,
+  *::after {
     box-shadow: none !important;
     text-shadow: none !important;
     animation: none !important;
     transition: none !important;
   }
 
-  /* 
-    السر لترتيب الصفحة: إجبار البطاقات والعناصر المهمة على عدم الانقسام
-    استخدام inline-block هو خدعة تقنية تجبر الـ Page Break على العمل
-  */
-  .break-inside-avoid, .card, .border { 
-    break-inside: avoid !important; 
-    page-break-inside: avoid !important; 
-    display: inline-block !important; /* يمنع الفليكس من كسر العنصر */
-    width: 100% !important;
-    margin-bottom: 10px !important;
-  }
-
-  h1, h2, h3, h4 { 
-    break-after: avoid !important; 
-    page-break-after: avoid !important; 
-  }
-
-  /* الرسوم البيانية ومخطط الجسم */
-  .recharts-responsive-container {
-    width: 100% !important;
-    min-height: 400px !important; /* ضمان عدم انهيار مساحة الرسم البياني */
-    display: block !important;
-  }
-
-  img, canvas {
+  img,
+  svg,
+  canvas {
     max-width: 100% !important;
-    max-height: 250mm !important;
-    object-fit: contain !important;
+    height: auto;
   }
 
-  /* مربعات النصوص تتمدد لتشمل كل المحتوى */
+  /* نظافة تقسيم الصفحات ومنع "الأيتام" (سطر وحيد ينفصل عن فقرته) */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  tr,
+  img,
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* تكرار رأس الجدول تلقائيًا أعلى كل صفحة يمتد فيها الجدول (دعم متصفح أصلي) */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* =========================================
+     الهيدر الثابت — يتكرر أعلى كل صفحة طباعة
+     ========================================= */
+  .print-page-header {
+    display: flex !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--print-header-h);
+    box-sizing: border-box;
+    padding: 3mm var(--print-margin-x) 2mm var(--print-margin-x);
+    align-items: center;
+    justify-content: space-between;
+    gap: 8mm;
+    background: #fff;
+    border-bottom: 1.5pt solid var(--print-accent);
+    z-index: 999999;
+  }
+
+  .print-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    min-width: 0;
+  }
+
+  .print-header-brand img {
+    height: 12mm;
+    width: 12mm;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .print-header-clinic {
+    margin: 0;
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--print-accent);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .print-header-sub {
+    margin: 0;
+    font-size: 7.5pt;
+    color: #555;
+    white-space: nowrap;
+  }
+
+  .print-header-doc {
+    text-align: right;
+    min-width: 0;
+    max-width: 100mm;
+  }
+
+  .print-header-title {
+    margin: 0;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #333;
+    white-space: nowrap;
+  }
+
+  .print-header-patient {
+    margin: 1mm 0 0 0;
+    font-size: 8.5pt;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* =========================================
+     الفوتر الثابت — يتكرر أسفل كل صفحة طباعة
+     ========================================= */
+  .print-page-footer {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--print-footer-h);
+    box-sizing: border-box;
+    padding: 2mm var(--print-margin-x);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5mm;
+    background: #fff;
+    border-top: 0.75pt solid #ccc;
+    z-index: 999999;
+  }
+
+  .print-footer-line {
+    margin: 0;
+    font-size: 7.5pt;
+    color: #777;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .print-footer-line strong {
+    color: #444;
+  }
+
+  /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة المعزول فقط
+     (الهيدر/الفوتر الثابتان يوضعان كعناصر داخل نفس الحاوية المعزولة
+     في المكوّنات، لذلك يرثان الظهور تلقائيًا هنا) */
+  body.printing-isolated * {
+    visibility: hidden;
+  }
+  body.printing-isolated .isolated-print-container,
+  body.printing-isolated .isolated-print-container * {
+    visibility: visible;
+  }
+
+  /* إزالة مساحات عناصر الشاشة من مسار قالب الطباعة المعزول بدل إخفائها بصرياً فقط */
+  body.printing-isolated *:has(.isolated-print-container)
+    > :not(:has(.isolated-print-container)):not(.isolated-print-container) {
+    display: none !important;
+  }
+
+  body.printing-isolated *:has(.isolated-print-container) {
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-isolated .isolated-print-container {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* إجبار مربعات النصوص (Textarea) على إظهار النص بالكامل وعدم قصه */
   textarea {
     height: auto !important;
     min-height: fit-content !important;
@@ -217,6 +452,7 @@
     border: none !important;
     resize: none !important;
     padding: 0 !important;
+    color: #000 !important;
     background: transparent !important;
   }
 }
