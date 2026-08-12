@@ -34,6 +34,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
 
   const [isPrintingHEP, setIsPrintingHEP] = useState(false);
 
+  // كود العزل الذكي لمنع تداخل هيدر المريض العام
   useEffect(() => {
     if (isPrintingHEP) document.body.classList.add("printing-isolated");
     else document.body.classList.remove("printing-isolated");
@@ -199,7 +200,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setTimeout(() => {
       window.print();
       setIsPrintingHEP(false);
-    }, 500);
+    }, 150);
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -209,35 +210,40 @@ export function PatientExercises({ patientId }: { patientId: string }) {
 
   return (
     <>
+      {/* ----------------- قالب طباعة البرنامج المنزلي (HEP) ----------------- */}
       {isPrintingHEP && (
-        <div className="isolated-print-container hidden print:block bg-white p-0">
-          <div className="print-header flex justify-between items-start">
-            <div className="flex items-center gap-4">
-              <img src={logo} alt="Physio Life" className="h-16 w-16 object-contain" />
-              <div>
-                <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
-                <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+        <div className="isolated-print-container fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
+          {/* Header */}
+<div className="h-6"></div>
+          <div className="border-b-2 border-primary pb-6 mb-8">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-20 w-20 object-contain" />
+                <div>
+                  <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">HOME EXERCISE PROGRAM</h3>
+                <p className="text-gray-500 mt-1">Date: {new Date().toLocaleDateString('en-GB')}</p>
+                <p className="text-gray-500">Therapist: {fullName}</p>
               </div>
             </div>
-            <div className="text-right text-xs text-gray-500 space-y-1">
-              <h3 className="text-lg font-bold text-gray-800 tracking-wider mb-1">HOME EXERCISE PROGRAM</h3>
-              <p><span className="font-semibold text-gray-700">Date:</span> {new Date().toLocaleDateString('en-GB')}</p>
-              <p><span className="font-semibold text-gray-700">Therapist:</span> {fullName}</p>
+            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between">
+              <div>
+                <p className="text-sm text-gray-500 uppercase font-semibold">Patient Name</p>
+                <p className="text-xl font-bold mt-1">{patient?.full_name}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500 uppercase font-semibold">Patient ID</p>
+                <p className="text-lg font-medium mt-1">{patient?.code}</p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between mb-6">
-            <div>
-              <p className="text-sm text-gray-500 uppercase font-semibold">Patient Name</p>
-              <p className="text-xl font-bold mt-1">{patient?.full_name}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500 uppercase font-semibold">Patient ID</p>
-              <p className="text-lg font-medium mt-1">{patient?.code}</p>
-            </div>
-          </div>
-
-          <div className="bg-secondary/20 p-4 rounded-lg border border-secondary mb-6 text-sm text-gray-800 break-inside-avoid">
+          {/* Guidelines / Tips */}
+          <div className="bg-secondary/20 p-4 rounded-lg border border-secondary mb-8 text-sm text-gray-800">
             <p className="font-bold mb-2">💡 Guidelines for your Home Program:</p>
             <ul className="list-disc list-inside space-y-1 ml-2">
               <li>Perform exercises slowly and with control unless instructed otherwise.</li>
@@ -246,6 +252,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             </ul>
           </div>
 
+          {/* Exercises List */}
           <div className="space-y-6">
             {assigned.map((pex, index) => (
               <div key={pex.id} className="border-2 border-gray-200 rounded-xl p-5 break-inside-avoid">
@@ -295,15 +302,17 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             ))}
           </div>
 
-          <div className="print-footer hidden print:flex">
-            <p className="font-bold text-gray-800">Physio Life Physical Therapy Center</p>
-            <p className="text-gray-600">Phone: +123456789 | Email: info@physiolife.com</p>
-            <p className="text-xs text-gray-400 mt-1">If you have any questions about your program, please contact the clinic.</p>
+          {/* Footer */}
+          <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
+            <p className="font-semibold text-gray-700 mb-1">Physio Life Physical Therapy Center</p>
+            <p>If you have any questions about your program, please contact the clinic.</p>
           </div>
         </div>
       )}
+      {/* --------------------------------------------------------------------------------------- */}
 
-      <div className={isPrintingHEP ? "hidden" : "space-y-6 print:hidden"}>
+      {/* الواجهة العادية المخفية أثناء الطباعة */}
+      <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -370,6 +379,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             <Badge variant="secondary">{doneCount} completions total</Badge>
           </div>
           
+          {/* زر الطباعة للبرنامج المنزلي */}
           {assigned.length > 0 && (
             <Button variant="outline" onClick={handlePrintProgram} className="shrink-0">
               <Printer className="mr-2 h-4 w-4" /> Print HEP Sheet
@@ -460,3 +470,5 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     </>
   );
 }
+
+
