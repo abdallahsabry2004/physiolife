@@ -38,6 +38,8 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
   component: PatientDetail,
 });
 
+type PrintMode = 'full' | 'sessions' | 'body' | 'progress' | 'measures' | 'questionnaires' | null;
+
 function PatientDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -49,13 +51,17 @@ function PatientDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
-  const [isPrintingProfile, setIsPrintingProfile] = useState(false);
+  // حالة الطباعة الذكية
+  const [printMode, setPrintMode] = useState<PrintMode>(null);
 
   useEffect(() => {
-    if (isPrintingProfile) document.body.classList.add("printing-isolated");
-    else document.body.classList.remove("printing-isolated");
+    if (printMode) {
+      document.body.classList.add("printing-isolated");
+    } else {
+      document.body.classList.remove("printing-isolated");
+    }
     return () => document.body.classList.remove("printing-isolated");
-  }, [isPrintingProfile]);
+  }, [printMode]);
 
   const { data: patient } = useQuery({
     queryKey: ["patient", id],
@@ -252,11 +258,11 @@ function PatientDetail() {
     }
   };
 
-  const handlePrintFullProfile = () => {
-    setIsPrintingProfile(true);
+  const handlePrint = (mode: PrintMode) => {
+    setPrintMode(mode);
     setTimeout(() => {
       window.print();
-      setIsPrintingProfile(false);
+      setPrintMode(null);
     }, 500);
   };
 
@@ -265,10 +271,8 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ============================================================== */}
-      {/* 🖨️ منطقة الطباعة المعزولة */}
-      {/* ============================================================== */}
-      {isPrintingProfile && (
+      {/* منطقة الطباعة المعزولة والديناميكية */}
+      {printMode && (
         <div className="isolated-print-container hidden print:block w-full">
           <div className="border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
@@ -277,11 +281,18 @@ function PatientDetail() {
                 <div>
                   <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
                   <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                  <div className="mt-1 flex flex-col text-xs text-gray-500">
+                    <span>📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</span>
+                    <span>📞 للتواصل والحجز: 01050359331</span>
+                  </div>
                 </div>
               </div>
               <div className="text-right text-xs text-gray-500 space-y-1">
-                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
+                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-US', { hour12: true, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                 <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
+                {printMode !== 'full' && (
+                  <p className="font-bold text-primary uppercase mt-2 text-sm">{printMode} REPORT</p>
+                )}
               </div>
             </div>
 
@@ -296,26 +307,101 @@ function PatientDetail() {
           </div>
 
           <div className="space-y-8">
-             <div className="break-inside-avoid">
-                <h3 className="font-bold text-lg mb-2 border-b pb-1">1. Medical History</h3>
-                <ClinicalModule patientId={id} module="history" title="" />
-             </div>
-             <div className="break-inside-avoid">
-                <h3 className="font-bold text-lg mb-2 border-b pb-1">2. Physical Examination</h3>
-                <ClinicalModule patientId={id} module="exam" title="" />
-             </div>
-             <div className="break-inside-avoid">
-                <h3 className="font-bold text-lg mb-2 border-b pb-1">3. Diagnosis & Plan</h3>
-                <ClinicalModule patientId={id} module="diagnosis" title="" />
-             </div>
+             {/* 1. التقرير الشامل (Full Report) */}
+             {printMode === 'full' && (
+               <>
+                 <div className="break-inside-avoid">
+                    <h3 className="font-bold text-lg mb-2 border-b pb-1">1. Medical History</h3>
+                    <ClinicalModule patientId={id} module="history" title="" />
+                 </div>
+                 <div className="break-inside-avoid">
+                    <h3 className="font-bold text-lg mb-2 border-b pb-1">2. Physical Examination</h3>
+                    <ClinicalModule patientId={id} module="exam" title="" />
+                 </div>
+                 <div className="break-inside-avoid">
+                    <h3 className="font-bold text-lg mb-2 border-b pb-1">3. Diagnosis & Plan</h3>
+                    <ClinicalModule patientId={id} module="diagnosis" title="" />
+                 </div>
+               </>
+             )}
+
+             {/* 2. طباعة الجلسات (Sessions) */}
+             {printMode === 'sessions' && (
+                <div className="space-y-6">
+                  {sessions.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No sessions recorded yet.</p>
+                  ) : (
+                    sessions.map((s) => (
+                      <div key={s.id} className="border border-gray-300 rounded-lg p-4 break-inside-avoid">
+                        <div className="flex justify-between items-center border-b pb-2 mb-3">
+                          <h4 className="font-bold text-lg text-primary">Session #{s.session_number}</h4>
+                          <span className="text-sm font-medium text-gray-600">{s.session_date}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                          {s.subjective && <div><span className="font-bold text-gray-700 block mb-1">Subjective:</span><p className="whitespace-pre-wrap">{s.subjective}</p></div>}
+                          {s.objective && <div><span className="font-bold text-gray-700 block mb-1">Objective:</span><p className="whitespace-pre-wrap">{s.objective}</p></div>}
+                          {s.assessment && <div><span className="font-bold text-gray-700 block mb-1">Assessment:</span><p className="whitespace-pre-wrap">{s.assessment}</p></div>}
+                          {s.plan && <div><span className="font-bold text-gray-700 block mb-1">Plan:</span><p className="whitespace-pre-wrap">{s.plan}</p></div>}
+                        </div>
+                        <div className="flex gap-6 text-sm bg-gray-50 p-2 rounded">
+                          {s.pain_before !== null && <p><span className="font-bold text-gray-600">Pain before:</span> {s.pain_before}/10</p>}
+                          {s.pain_after !== null && <p><span className="font-bold text-gray-600">Pain after:</span> {s.pain_after}/10</p>}
+                          {s.duration_minutes !== null && <p><span className="font-bold text-gray-600">Duration:</span> {s.duration_minutes} min</p>}
+                        </div>
+                        <div className="mt-4">
+                          <ClinicalModule patientId={id} module="session" sessionId={s.id} title="Interventions performed" />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+             )}
+
+             {/* 3. طباعة مخطط الجسم (Body Chart) */}
+             {printMode === 'body' && (
+                <div className="break-inside-avoid">
+                   <ProfessionalBodyChart patientId={id} sessionId={undefined} />
+                </div>
+             )}
+
+             {/* 4. طباعة مقياس التقدم (Progress) */}
+             {printMode === 'progress' && (
+                <div className="break-inside-avoid h-[500px]">
+                   {painSeries.length === 0 ? (
+                      <p className="text-gray-500">Not enough data to build progress chart.</p>
+                   ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={painSeries}>
+                          <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
+                          <YAxis domain={[0, 10]} stroke="currentColor" fontSize={12} />
+                          <ChartTooltip />
+                          <Line type="monotone" dataKey="before" stroke="var(--chart-1)" strokeWidth={2} />
+                          <Line type="monotone" dataKey="after" stroke="var(--chart-2)" strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                   )}
+                </div>
+             )}
+
+             {/* 5. طباعة القياسات (Measurements) */}
+             {printMode === 'measures' && (
+                <div className="break-inside-avoid">
+                   <PatientMeasurements patientId={id} />
+                </div>
+             )}
+
+             {/* 6. طباعة الاستبيانات (Questionnaires) */}
+             {printMode === 'questionnaires' && (
+                <div className="break-inside-avoid">
+                   <PatientAssessments patientId={id} />
+                </div>
+             )}
           </div>
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* 💻 الواجهة الرئيسية */}
-      {/* ============================================================== */}
-      <div className={isPrintingProfile ? "hidden" : "block print:hidden"}>
+      {/* الواجهة الرئيسية للموقع */}
+      <div className={printMode ? "hidden" : "block print:hidden"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link to="/patients" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -354,7 +440,7 @@ function PatientDetail() {
               </Badge>
             )}
 
-            <Button variant="outline" onClick={handlePrintFullProfile}>
+            <Button variant="outline" onClick={() => handlePrint('full')}>
               <Printer className="mr-2 h-4 w-4" /> Print Full Report
             </Button>
 
@@ -478,11 +564,18 @@ function PatientDetail() {
           </TabsContent>
 
           <TabsContent value="sessions" className="mt-6 space-y-4">
-            {canEditClinical && (
-              <Button onClick={() => newSession.mutate()}>
-                <Plus className="mr-2 h-4 w-4" /> Open a new visit
-              </Button>
-            )}
+            <div className="flex items-center justify-between">
+              {canEditClinical && (
+                <Button onClick={() => newSession.mutate()}>
+                  <Plus className="mr-2 h-4 w-4" /> Open a new visit
+                </Button>
+              )}
+              {sessions.length > 0 && (
+                <Button variant="outline" onClick={() => handlePrint('sessions')} className="ml-auto">
+                  <Printer className="mr-2 h-4 w-4" /> Print Sessions
+                </Button>
+              )}
+            </div>
             {sessions.length === 0 && (
               <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
             )}
@@ -558,12 +651,24 @@ function PatientDetail() {
           </TabsContent>
 
           <TabsContent value="body" className="mt-6 space-y-4">
+            <div className="flex justify-end mb-2">
+               <Button variant="outline" onClick={() => handlePrint('body')} size="sm">
+                  <Printer className="mr-2 h-4 w-4" /> Print Body Chart
+               </Button>
+            </div>
             <ProfessionalBodyChart patientId={id} sessionId={undefined} />
           </TabsContent>
 
           <TabsContent value="progress" className="mt-6">
             <Card>
-              <CardHeader><CardTitle className="text-base">Pain across sessions</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row justify-between items-center">
+                <CardTitle className="text-base">Pain across sessions</CardTitle>
+                {painSeries.length > 0 && (
+                  <Button variant="outline" onClick={() => handlePrint('progress')} size="sm">
+                    <Printer className="mr-2 h-4 w-4" /> Print Progress
+                  </Button>
+                )}
+              </CardHeader>
               <CardContent className="h-72">
                 {painSeries.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Record pain before/after in sessions to build the graph.</p>
@@ -583,10 +688,20 @@ function PatientDetail() {
           </TabsContent>
 
           <TabsContent value="measures" className="mt-6">
+            <div className="flex justify-end mb-4">
+               <Button variant="outline" onClick={() => handlePrint('measures')} size="sm">
+                  <Printer className="mr-2 h-4 w-4" /> Print Measurements
+               </Button>
+            </div>
             <PatientMeasurements patientId={id} />
           </TabsContent>
 
           <TabsContent value="questionnaires" className="mt-6">
+            <div className="flex justify-end mb-4">
+               <Button variant="outline" onClick={() => handlePrint('questionnaires')} size="sm">
+                  <Printer className="mr-2 h-4 w-4" /> Print Questionnaires
+               </Button>
+            </div>
             <PatientAssessments patientId={id} />
           </TabsContent>
 
