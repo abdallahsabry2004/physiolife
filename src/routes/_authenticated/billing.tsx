@@ -364,7 +364,7 @@ function BillingPage() {
     setTimeout(() => {
       window.print();
       setPrintData(null);
-    }, 300);
+    }, 500);
   };
 
   const handlePrintHistory = () => {
@@ -393,7 +393,7 @@ function BillingPage() {
     setTimeout(() => {
       window.print();
       setPrintData(null);
-    }, 300);
+    }, 500);
   };
 
   return (
@@ -402,26 +402,26 @@ function BillingPage() {
         <div className="isolated-print-container hidden print:block bg-white p-0">
           <div className="print-header flex justify-between items-start">
             <div className="flex items-center gap-4">
-              <img src={logo} alt="Physio Life" className="h-16 w-16" />
+              <img src={logo} alt="Physio Life" className="h-20 w-20" />
               <div>
-                <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+                <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
                 <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
               </div>
             </div>
-            <div className="text-right text-xs text-gray-500 space-y-1">
-              <h3 className="text-lg font-bold text-gray-800 tracking-wider mb-1">
+            <div className="text-right">
+              <h3 className="text-2xl font-bold text-gray-800 tracking-wider">
                 {printData.type === 'invoice' && 'INVOICE STATEMENT'}
                 {printData.type === 'payment' && 'PAYMENT RECEIPT'}
                 {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
               </h3>
               {printData.type !== 'history' && (
-                <p><span className="font-semibold text-gray-700">No:</span> #{printData.data.id.split('-')[0]}</p>
+                <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
               )}
-              <p><span className="font-semibold text-gray-700">Date:</span> {new Date().toLocaleDateString('en-GB')}</p>
+              <p className="text-gray-500">Date: {new Date().toLocaleDateString('en-GB')}</p>
             </div>
           </div>
 
-          <div className="mt-4 space-y-6">
+          <div className="mt-8 space-y-6">
             <div className="flex justify-between border-b pb-4">
               <div>
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
@@ -568,15 +568,15 @@ function BillingPage() {
             </div>
           </div>
 
-          <div className="print-footer">
-            <p className="font-bold">Physio Life Physical Therapy Center</p>
-            <p>123 Clinic Address Street, City, Country | Phone: +123456789 | Email: info@physiolife.com</p>
-            <p className="text-xs mt-1">This is a computer-generated document and does not require a physical stamp.</p>
+          <div className="print-footer hidden print:flex">
+            <p className="font-bold text-gray-800">Physio Life Physical Therapy Center</p>
+            <p className="text-gray-600">Phone: +123456789 | Email: info@physiolife.com</p>
+            <p className="text-xs text-gray-400 mt-1">This is a computer-generated document and does not require a physical stamp.</p>
           </div>
         </div>
       )}
 
-      <div className={printData ? "hidden" : "space-y-6"}>
+      <div className={printData ? "hidden" : "space-y-6 print:hidden"}>
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Billing & Payments</h1>
@@ -767,6 +767,7 @@ function BillingPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
+            
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
