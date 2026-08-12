@@ -199,7 +199,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setTimeout(() => {
       window.print();
       setIsPrintingHEP(false);
-    }, 150);
+    }, 500);
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -210,8 +210,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   return (
     <>
       {isPrintingHEP && (
-        <div className="isolated-print-container fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
-          <div className="h-6"></div>
+        <div className="isolated-print-container hidden print:block w-full">
           <div className="border-b-2 border-primary pb-6 mb-8">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -303,6 +302,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             ))}
           </div>
 
+          {/* رسالة البرنامج المنزلي الأصلية في أسفل الطباعة المعزولة */}
           <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
             <p className="font-semibold text-gray-700 mb-1">Physio Life Physical Therapy Center</p>
             <p>If you have any questions about your program, please contact the clinic.</p>
@@ -310,7 +310,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
         </div>
       )}
 
-      <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
+      <div className={isPrintingHEP ? "hidden" : "space-y-6 print:hidden"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
