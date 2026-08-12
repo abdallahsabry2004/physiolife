@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[cite: 1] تم استيراد المكون الذكي
 
 type Props = {
   patientId: string;
@@ -185,6 +185,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
               </div>
             </div>
             <div className="flex gap-2">
+              {/*[cite: 1] تم دمج مكوّن الإكمال التلقائي هنا لتسهيل إدخال عنصر مخصص */}
               <div className="flex-1">
                  <MedicalAutocomplete
                   value={custom}
@@ -221,6 +222,8 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                   </button>
                 )}
               </div>
+              {/*[cite: 1] تم استبدال الـ Textarea بمكون الاقتراحات الطبية */}
+              {/*[cite: 1] استبدال جزء عرض النص في ClinicalModule.tsx */}
               {!canEditClinical ? (
                 <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0 whitespace-pre-wrap break-words">
                   {r.value || "—"}
@@ -244,6 +247,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                       placeholder={`Enter ${r.label.toLowerCase()}...`}
                     />
                   </div>
+                  {/* النسخة المخفية اللي بتظهر في الطباعة فقط عشان النص يتمدد بالكامل بدون أي قص */}
                   <div className="hidden print:block text-sm p-0 border-none whitespace-pre-wrap break-words text-black">
                     {drafts[r.id] ?? r.value ?? "—"}
                   </div>
@@ -256,3 +260,5 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     </div>
   );
 }
+
+
