@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PrintHeader, PrintFooter } from "@/components/print/PrintChrome";
+import logo from "@/assets/physio-life-logo.png";
 
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({
@@ -401,39 +401,32 @@ function BillingPage() {
     <div className="space-y-6">
       {/* ----------------- قوالب الطباعة ----------------- */}
       {printData && (
-        <div className="isolated-print-container hidden print:block bg-white">
-          {/* هيدر ثابت يتكرر تلقائيًا أعلى كل صفحة طباعة */}
-          <PrintHeader
-            documentTitle={
-              printData.type === 'invoice'
-                ? 'Invoice Statement'
-                : printData.type === 'payment'
-                ? 'Payment Receipt'
-                : 'Statement of Account'
-            }
-            patientName={
-              printData.type === 'history'
-                ? printData.data.patient.full_name
-                : (printData.data.patients as any)?.full_name
-            }
-            patientCode={
-              printData.type === 'history'
-                ? printData.data.patient.code
-                : (printData.data.patients as any)?.code
-            }
-          />
+        <div className="isolated-print-container hidden print:block bg-white p-8">
+          <div className="border-b-2 border-primary pb-6 mb-6">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-20 w-20" />
+                <div>
+                  <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">
+                  {printData.type === 'invoice' && 'INVOICE STATEMENT'}
+                  {printData.type === 'payment' && 'PAYMENT RECEIPT'}
+                  {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
+                </h3>
+                {printData.type !== 'history' && (
+                  <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
+                )}
+                <p className="text-gray-500">Date: {new Date().toLocaleDateString('en-GB')}</p>
+              </div>
+            </div>
+          </div>
 
-          {/* فوتر ثابت يتكرر تلقائيًا أسفل كل صفحة طباعة */}
-          <PrintFooter
-            note={
-              printData.type !== 'history'
-                ? `Document No: #${printData.data.id.split('-')[0]} · ${new Date().toLocaleDateString('en-GB')}`
-                : `Printed on ${new Date().toLocaleDateString('en-GB')}`
-            }
-          />
-
-          <div className="px-8 py-6 space-y-6">
-            <div className="flex justify-between border-b pb-4 break-inside-avoid">
+          <div className="mt-8 space-y-6">
+            <div className="flex justify-between border-b pb-4">
               <div>
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
                 <p className="text-xl font-bold mt-1">
@@ -567,7 +560,7 @@ function BillingPage() {
               </div>
             )}
 
-            <div className="mt-16 pt-8 border-t border-dashed flex justify-between items-end break-inside-avoid">
+            <div className="mt-16 pt-8 border-t border-dashed flex justify-between items-end">
               <div>
                 <p className="text-sm text-gray-500 mb-2">Issued By (Staff)</p>
                 <p className="font-bold text-lg">{fullName}</p>
@@ -578,7 +571,7 @@ function BillingPage() {
               </div>
             </div>
             
-            <div className="mt-12 text-center text-xs text-gray-400 break-inside-avoid">
+            <div className="mt-12 text-center text-xs text-gray-400">
               <p>Thank you for choosing Physio Life PT Center.</p>
               <p>This is a computer-generated document and does not require a physical stamp.</p>
             </div>
@@ -1037,3 +1030,5 @@ function BillingPage() {
     </div>
   );
 }
+
+
