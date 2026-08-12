@@ -4,20 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -144,7 +130,6 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
-
 }
 
 /* =========================================
@@ -153,98 +138,102 @@
 @media print {
   @page {
     size: A4 portrait;
-    /* تحديد هوامش الصفحة: أعلى، يمين، أسفل (كبير جداً ليحجز مكان الفوتر)، يسار */
-    margin: 15mm 15mm 45mm 15mm; 
+    /* המסافة السفلية تحجز مكان الفوتر الثابت */
+    margin: 12mm 12mm 30mm 12mm;
   }
 
   html,
   body {
     width: 100% !important;
+    max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
     color: #000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    font-size: 12pt !important; /* حجم خط مقروء للطباعة */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: 11pt;
+    line-height: 1.45;
   }
 
-  /* إخفاء كل عناصر الواجهة الافتراضية (الشريط الجانبي، الأزرار، التبويبات) */
-  #root > *:not(.printing-isolated-wrapper),
+  /* إخفاء عناصر الواجهة غير المرغوب فيها أثناء الطباعة */
   aside,
   nav,
-  header:not(.print-header),
-  button,
-  .print\:hidden {
+  header.print-app-header,
+  .print\:hidden,
+  [data-print-hide],
+  button:not(.print-keep) {
     display: none !important;
   }
 
   /* -----------------------------------------------------------
-     العزل الذكي (Isolated Print) - هذه هي الحيلة الاحترافية
-     عندما نضيف كلاس printing-isolated للـ body، نخفي كل شيء
-     عدا الحاوية المخصصة للطباعة (isolated-print-container)
+     العزل الذكي (Isolated Print) - يعمل فقط أثناء الطباعة
   ----------------------------------------------------------- */
-  body.printing-isolated > * {
+  body.printing-isolated *:not(.isolated-print-container):not(.isolated-print-container *):not(.print-footer):not(.print-footer *) {
     display: none !important;
   }
-  
+
   body.printing-isolated .isolated-print-container {
     display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: white;
   }
 
   /* -----------------------------------------------------------
      الترويسة والتذييل الثابت (Fixed Header & Footer)
   ----------------------------------------------------------- */
-  .print-header {
-    /* يظهر في أعلى الصفحة الأولى، وإذا أردته في كل صفحة يمكن استخدام thead في جدول */
-    margin-bottom: 20px;
-    border-bottom: 2px solid var(--color-primary);
-    padding-bottom: 10px;
-  }
-
   .print-footer {
-    /* هذا هو السر: تثبيت التذييل في أسفل الصفحة دائماً */
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 35mm; /* ارتفاع التذييل يتناسب مع الهامش السفلي في @page */
-    background: white;
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-height: 20mm; /* مساحة للفوتر */
+    background-color: #fff !important;
     border-top: 1px solid #ccc;
     padding-top: 10px;
-    text-align: center;
-    font-size: 10pt;
-    color: #555;
-    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 999999 !important;
   }
 
-  /* منع انقسام العناصر المهمة بين صفحتين */
-  .break-inside-avoid,
-  .card, /* البطاقات */
-  tr,
-  img {
-    break-inside: avoid;
-    page-break-inside: avoid;
+  /* منع الظلال والحدود الملوّنة الزائدة */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
   }
-  
-  h1, h2, h3 {
-    break-after: avoid;
+
+  /* نظافة تقسيم الصفحات */
+  h1, h2, h3, h4 {
+    break-after: avoid-page;
     page-break-after: avoid;
   }
 
-  /* إظهار النص كاملاً في حقول الإدخال */
-  textarea, input {
+  tr, img, .break-inside-avoid, .card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  textarea {
+    height: auto !important;
+    min-height: fit-content !important;
+    overflow: visible !important;
+    white-space: pre-wrap !important;
     border: none !important;
     resize: none !important;
+    padding: 0 !important;
+    color: #000 !important;
     background: transparent !important;
-    height: auto !important;
-    overflow: visible !important;
   }
 }
