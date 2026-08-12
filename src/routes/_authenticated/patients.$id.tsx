@@ -51,7 +51,6 @@ function PatientDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
 
-  // حالة الطباعة الذكية
   const [printMode, setPrintMode] = useState<PrintMode>(null);
 
   useEffect(() => {
@@ -260,10 +259,11 @@ function PatientDetail() {
 
   const handlePrint = (mode: PrintMode) => {
     setPrintMode(mode);
+    // إعطاء وقت كافٍ (800ms) لمكتبة Recharts لكي تبني الرسوم البيانية قبل الطباعة
     setTimeout(() => {
       window.print();
       setPrintMode(null);
-    }, 500);
+    }, 800);
   };
 
   if (!patient) return <p className="text-sm text-muted-foreground">Loading record…</p>;
@@ -271,136 +271,173 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* منطقة الطباعة المعزولة والديناميكية */}
+      {/* منطقة الطباعة المعزولة */}
       {printMode && (
-        <div className="isolated-print-container hidden print:block w-full">
-          <div className="border-b-2 border-primary pb-6 mb-6">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <img src={logo} alt="Physio Life" className="h-16 w-16" />
-                <div>
-                  <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
-                  <div className="mt-1 flex flex-col text-xs text-gray-500">
-                    <span>📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</span>
-                    <span>📞 للتواصل والحجز: 01050359331</span>
-                  </div>
-                </div>
-              </div>
-              <div className="text-right text-xs text-gray-500 space-y-1">
-                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-US', { hour12: true, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
-                {printMode !== 'full' && (
-                  <p className="font-bold text-primary uppercase mt-2 text-sm">{printMode} REPORT</p>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
-              <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
-                <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
-                <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
-                <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-                <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-8">
-             {/* 1. التقرير الشامل (Full Report) */}
-             {printMode === 'full' && (
-               <>
-                 <div className="break-inside-avoid">
-                    <h3 className="font-bold text-lg mb-2 border-b pb-1">1. Medical History</h3>
-                    <ClinicalModule patientId={id} module="history" title="" />
-                 </div>
-                 <div className="break-inside-avoid">
-                    <h3 className="font-bold text-lg mb-2 border-b pb-1">2. Physical Examination</h3>
-                    <ClinicalModule patientId={id} module="exam" title="" />
-                 </div>
-                 <div className="break-inside-avoid">
-                    <h3 className="font-bold text-lg mb-2 border-b pb-1">3. Diagnosis & Plan</h3>
-                    <ClinicalModule patientId={id} module="diagnosis" title="" />
-                 </div>
-               </>
-             )}
-
-             {/* 2. طباعة الجلسات (Sessions) */}
-             {printMode === 'sessions' && (
-                <div className="space-y-6">
-                  {sessions.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No sessions recorded yet.</p>
-                  ) : (
-                    sessions.map((s) => (
-                      <div key={s.id} className="border border-gray-300 rounded-lg p-4 break-inside-avoid">
-                        <div className="flex justify-between items-center border-b pb-2 mb-3">
-                          <h4 className="font-bold text-lg text-primary">Session #{s.session_number}</h4>
-                          <span className="text-sm font-medium text-gray-600">{s.session_date}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                          {s.subjective && <div><span className="font-bold text-gray-700 block mb-1">Subjective:</span><p className="whitespace-pre-wrap">{s.subjective}</p></div>}
-                          {s.objective && <div><span className="font-bold text-gray-700 block mb-1">Objective:</span><p className="whitespace-pre-wrap">{s.objective}</p></div>}
-                          {s.assessment && <div><span className="font-bold text-gray-700 block mb-1">Assessment:</span><p className="whitespace-pre-wrap">{s.assessment}</p></div>}
-                          {s.plan && <div><span className="font-bold text-gray-700 block mb-1">Plan:</span><p className="whitespace-pre-wrap">{s.plan}</p></div>}
-                        </div>
-                        <div className="flex gap-6 text-sm bg-gray-50 p-2 rounded">
-                          {s.pain_before !== null && <p><span className="font-bold text-gray-600">Pain before:</span> {s.pain_before}/10</p>}
-                          {s.pain_after !== null && <p><span className="font-bold text-gray-600">Pain after:</span> {s.pain_after}/10</p>}
-                          {s.duration_minutes !== null && <p><span className="font-bold text-gray-600">Duration:</span> {s.duration_minutes} min</p>}
-                        </div>
-                        <div className="mt-4">
-                          <ClinicalModule patientId={id} module="session" sessionId={s.id} title="Interventions performed" />
+        <div className="isolated-print-container block w-full">
+          
+          <table className="w-full border-none">
+            <thead className="print:table-header-group">
+              <tr>
+                <td className="p-0 border-none">
+                  <div className="border-b-2 border-primary pb-6 mb-6">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-4">
+                        <img src={logo} alt="Physio Life" className="h-16 w-16" />
+                        <div>
+                          <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
+                          <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                          <div className="mt-1 flex flex-col text-xs text-gray-500">
+                            <span>📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</span>
+                            <span>📞 للتواصل والحجز: 01050359331</span>
+                          </div>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-             )}
+                      <div className="text-right text-xs text-gray-500 space-y-1">
+                        <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-US', { hour12: true, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                        <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
+                        {printMode !== 'full' && (
+                          <p className="font-bold text-primary uppercase mt-2 text-sm">{printMode} REPORT</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </thead>
 
-             {/* 3. طباعة مخطط الجسم (Body Chart) */}
-             {printMode === 'body' && (
-                <div className="break-inside-avoid">
-                   <ProfessionalBodyChart patientId={id} sessionId={undefined} />
-                </div>
-             )}
+            <tbody>
+              <tr>
+                <td className="p-0 border-none">
+                  
+                  {/* إصلاح مشكلة الاسم الطويل بتغيير طريقة العرض إلى مرنة (flex-col) لتتمدد للأسفل */}
+                  <div className="rounded-xl border-2 border-gray-200 p-4 mb-6 break-inside-avoid">
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm items-start">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-500 mb-1">Patient Name:</span>
+                        <span className="font-bold text-lg break-words whitespace-pre-wrap">{patient.full_name}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-500 mb-1">Patient ID:</span>
+                        <span className="font-medium">{patient.code}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-500 mb-1">Age / Gender:</span>
+                        <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-500 mb-1">Diagnosis:</span>
+                        <span className="font-medium break-words whitespace-pre-wrap">{patient.diagnosis || "Not specified"}</span>
+                      </div>
+                    </div>
+                  </div>
 
-             {/* 4. طباعة مقياس التقدم (Progress) */}
-             {printMode === 'progress' && (
-                <div className="break-inside-avoid h-[500px]">
-                   {painSeries.length === 0 ? (
-                      <p className="text-gray-500">Not enough data to build progress chart.</p>
-                   ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={painSeries}>
-                          <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
-                          <YAxis domain={[0, 10]} stroke="currentColor" fontSize={12} />
-                          <ChartTooltip />
-                          <Line type="monotone" dataKey="before" stroke="var(--chart-1)" strokeWidth={2} />
-                          <Line type="monotone" dataKey="after" stroke="var(--chart-2)" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                   )}
-                </div>
-             )}
+                  <div className="space-y-8 w-full">
+                     {printMode === 'full' && (
+                       <>
+                         <div className="break-inside-avoid">
+                            <h3 className="font-bold text-lg mb-2 border-b pb-1">1. Medical History</h3>
+                            <ClinicalModule patientId={id} module="history" title="" />
+                         </div>
+                         <div className="break-inside-avoid">
+                            <h3 className="font-bold text-lg mb-2 border-b pb-1">2. Physical Examination</h3>
+                            <ClinicalModule patientId={id} module="exam" title="" />
+                         </div>
+                         <div className="break-inside-avoid">
+                            <h3 className="font-bold text-lg mb-2 border-b pb-1">3. Diagnosis & Plan</h3>
+                            <ClinicalModule patientId={id} module="diagnosis" title="" />
+                         </div>
+                       </>
+                     )}
 
-             {/* 5. طباعة القياسات (Measurements) */}
-             {printMode === 'measures' && (
-                <div className="break-inside-avoid">
-                   <PatientMeasurements patientId={id} />
-                </div>
-             )}
+                     {printMode === 'sessions' && (
+                        <div className="space-y-6">
+                          {sessions.length === 0 ? (
+                            <p className="text-gray-500 text-sm">No sessions recorded yet.</p>
+                          ) : (
+                            sessions.map((s) => (
+                              <div key={s.id} className="border border-gray-300 rounded-lg p-4 break-inside-avoid">
+                                <div className="flex justify-between items-center border-b pb-2 mb-3">
+                                  <h4 className="font-bold text-lg text-primary">Session #{s.session_number}</h4>
+                                  <span className="text-sm font-medium text-gray-600">{s.session_date}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                                  {s.subjective && <div><span className="font-bold text-gray-700 block mb-1">Subjective:</span><p className="whitespace-pre-wrap">{s.subjective}</p></div>}
+                                  {s.objective && <div><span className="font-bold text-gray-700 block mb-1">Objective:</span><p className="whitespace-pre-wrap">{s.objective}</p></div>}
+                                  {s.assessment && <div><span className="font-bold text-gray-700 block mb-1">Assessment:</span><p className="whitespace-pre-wrap">{s.assessment}</p></div>}
+                                  {s.plan && <div><span className="font-bold text-gray-700 block mb-1">Plan:</span><p className="whitespace-pre-wrap">{s.plan}</p></div>}
+                                </div>
+                                <div className="flex gap-6 text-sm bg-gray-50 p-2 rounded">
+                                  {s.pain_before !== null && <p><span className="font-bold text-gray-600">Pain before:</span> {s.pain_before}/10</p>}
+                                  {s.pain_after !== null && <p><span className="font-bold text-gray-600">Pain after:</span> {s.pain_after}/10</p>}
+                                  {s.duration_minutes !== null && <p><span className="font-bold text-gray-600">Duration:</span> {s.duration_minutes} min</p>}
+                                </div>
+                                <div className="mt-4">
+                                  <ClinicalModule patientId={id} module="session" sessionId={s.id} title="Interventions performed" />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                     )}
 
-             {/* 6. طباعة الاستبيانات (Questionnaires) */}
-             {printMode === 'questionnaires' && (
-                <div className="break-inside-avoid">
-                   <PatientAssessments patientId={id} />
-                </div>
-             )}
+                     {printMode === 'body' && (
+                        <div className="break-inside-avoid flex justify-center items-center w-full">
+                           <ProfessionalBodyChart patientId={id} sessionId={undefined} />
+                        </div>
+                     )}
+
+                     {printMode === 'progress' && (
+                        <div className="break-inside-avoid w-full print:h-[120mm]">
+                           {painSeries.length === 0 ? (
+                              <p className="text-gray-500">Not enough data to build progress chart.</p>
+                           ) : (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={painSeries}>
+                                  <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
+                                  <YAxis domain={[0, 10]} stroke="currentColor" fontSize={12} />
+                                  <ChartTooltip />
+                                  <Line type="monotone" dataKey="before" stroke="var(--chart-1)" strokeWidth={2} />
+                                  <Line type="monotone" dataKey="after" stroke="var(--chart-2)" strokeWidth={2} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                           )}
+                        </div>
+                     )}
+
+                     {printMode === 'measures' && (
+                        <div className="break-inside-avoid w-full">
+                           <PatientMeasurements patientId={id} />
+                        </div>
+                     )}
+
+                     {printMode === 'questionnaires' && (
+                        <div className="break-inside-avoid w-full">
+                           <PatientAssessments patientId={id} />
+                        </div>
+                     )}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+            <tfoot className="print:table-footer-group">
+              <tr>
+                <td className="p-0 border-none">
+                  <div style={{ height: '25mm' }}></div>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div className="print-footer hidden print:flex text-center">
+            <p className="font-bold text-gray-800 text-sm">Physio Life Physical Therapy Center</p>
+            <p className="text-gray-600 text-xs">Phone: +123456789 | Email: info@physiolife.com</p>
+            <p className="text-[10px] text-gray-400 mt-1">Official Medical Record</p>
           </div>
         </div>
       )}
 
-      {/* الواجهة الرئيسية للموقع */}
+      {/* الواجهة الرئيسية */}
       <div className={printMode ? "hidden" : "block print:hidden"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
