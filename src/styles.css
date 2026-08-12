@@ -129,15 +129,14 @@
 }
 
 /* =========================================
-   إعدادات الطباعة الاحترافية والآمنة
+   إعدادات الطباعة الصارمة والمنظمة
    ========================================= */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 15mm; /* مساحة هوامش متوازنة للورقة */
   }
 
-  /* تصفير الـ HTML والـ Body ليسمح للورقة بالتمدد وعدم قص البيانات */
   html, body, #root {
     width: 100% !important;
     height: auto !important;
@@ -146,21 +145,22 @@
     padding: 0 !important;
     background: #fff !important;
     color: #000 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    font-size: 11pt;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 12pt !important;
     overflow: visible !important;
   }
 
-  /* إخفاء القوائم والشريط الجانبي والعناصر التي لا نحتاجها في الطباعة */
+  /* إخفاء القوائم والشريط الجانبي وأي أزرار */
   aside, nav, header.print-app-header, .print\:hidden, [data-print-hide], button:not(.print-keep) {
     display: none !important;
   }
 
-  /* تصفير الحاويات الأساسية لتسمح بتمدد الورقة */
+  /* تحويل الحاويات الأساسية إلى كتل لضمان عدم اختلال التخطيط */
   .print-shell,
   .print-shell-content,
-  .print-shell-main {
+  .print-shell-main,
+  .isolated-print-container {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -170,28 +170,7 @@
     padding: 0 !important;
   }
 
-  .isolated-print-container {
-    display: block !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white;
-  }
-
-  /* إصلاح الرسوم البيانية Recharts (لضمان عدم اختفائها) */
-  .recharts-responsive-container {
-    width: 100% !important;
-    min-height: 350px !important;
-    display: block !important;
-  }
-
-  /* إصلاح مخطط الجسم Body Chart (لضمان عدم قص الرأس أو الأقدام) */
-  img, canvas {
-    max-width: 100% !important;
-    max-height: 240mm !important;
-    object-fit: contain !important;
-  }
-
+  /* منع الظلال والأنيميشن لتخفيف الحمل على المتصفح وقت الطباعة */
   *, *::before, *::after {
     box-shadow: none !important;
     text-shadow: none !important;
@@ -199,11 +178,37 @@
     transition: none !important;
   }
 
-  /* نظافة تقسيم الصفحات */
-  h1, h2, h3, h4 { break-after: avoid-page; page-break-after: avoid; }
-  tr, .break-inside-avoid, .card { break-inside: avoid; page-break-inside: avoid; }
+  /* 
+    السر لترتيب الصفحة: إجبار البطاقات والعناصر المهمة على عدم الانقسام
+    استخدام inline-block هو خدعة تقنية تجبر الـ Page Break على العمل
+  */
+  .break-inside-avoid, .card, .border { 
+    break-inside: avoid !important; 
+    page-break-inside: avoid !important; 
+    display: inline-block !important; /* يمنع الفليكس من كسر العنصر */
+    width: 100% !important;
+    margin-bottom: 10px !important;
+  }
 
-  /* السماح للنصوص الطويلة بالظهور كاملة */
+  h1, h2, h3, h4 { 
+    break-after: avoid !important; 
+    page-break-after: avoid !important; 
+  }
+
+  /* الرسوم البيانية ومخطط الجسم */
+  .recharts-responsive-container {
+    width: 100% !important;
+    min-height: 400px !important; /* ضمان عدم انهيار مساحة الرسم البياني */
+    display: block !important;
+  }
+
+  img, canvas {
+    max-width: 100% !important;
+    max-height: 250mm !important;
+    object-fit: contain !important;
+  }
+
+  /* مربعات النصوص تتمدد لتشمل كل المحتوى */
   textarea {
     height: auto !important;
     min-height: fit-content !important;
@@ -212,7 +217,6 @@
     border: none !important;
     resize: none !important;
     padding: 0 !important;
-    color: #000 !important;
     background: transparent !important;
   }
 }
