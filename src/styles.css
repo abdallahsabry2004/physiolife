@@ -129,7 +129,7 @@
 }
 
 /* =========================================
-   إعدادات الطباعة الاحترافية
+   إعدادات الطباعة الاحترافية والآمنة
    ========================================= */
 @media print {
   @page {
@@ -137,8 +137,10 @@
     margin: 10mm;
   }
 
-  html, body {
+  /* تصفير الـ HTML والـ Body ليسمح للورقة بالتمدد وعدم قص البيانات */
+  html, body, #root {
     width: 100% !important;
+    height: auto !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -147,40 +149,47 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     font-size: 11pt;
+    overflow: visible !important;
   }
 
+  /* إخفاء القوائم والشريط الجانبي والعناصر التي لا نحتاجها في الطباعة */
   aside, nav, header.print-app-header, .print\:hidden, [data-print-hide], button:not(.print-keep) {
     display: none !important;
   }
 
-  body.printing-isolated *:not(.isolated-print-container):not(.isolated-print-container *):not(.print-footer):not(.print-footer *) {
-    display: none !important;
-  }
-
-  body.printing-isolated .isolated-print-container {
+  /* تصفير الحاويات الأساسية لتسمح بتمدد الورقة */
+  .print-shell,
+  .print-shell-content,
+  .print-shell-main {
     display: block !important;
     position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .isolated-print-container {
+    display: block !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     background: white;
   }
 
-  .print-footer {
-    display: flex !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
+  /* إصلاح الرسوم البيانية Recharts (لضمان عدم اختفائها) */
+  .recharts-responsive-container {
     width: 100% !important;
-    height: 25mm !important;
-    background-color: #fff !important;
-    border-top: 2px solid var(--color-primary);
-    padding-top: 5mm;
-    justify-content: flex-start;
-    align-items: center;
-    flex-direction: column;
-    z-index: 999999 !important;
+    min-height: 350px !important;
+    display: block !important;
+  }
+
+  /* إصلاح مخطط الجسم Body Chart (لضمان عدم قص الرأس أو الأقدام) */
+  img, canvas {
+    max-width: 100% !important;
+    max-height: 240mm !important;
+    object-fit: contain !important;
   }
 
   *, *::before, *::after {
@@ -190,9 +199,11 @@
     transition: none !important;
   }
 
+  /* نظافة تقسيم الصفحات */
   h1, h2, h3, h4 { break-after: avoid-page; page-break-after: avoid; }
   tr, .break-inside-avoid, .card { break-inside: avoid; page-break-inside: avoid; }
 
+  /* السماح للنصوص الطويلة بالظهور كاملة */
   textarea {
     height: auto !important;
     min-height: fit-content !important;
@@ -203,25 +214,5 @@
     padding: 0 !important;
     color: #000 !important;
     background: transparent !important;
-  }
-
-  /* 
-    إصلاح مشكلة اختفاء الرسوم البيانية (Recharts) في الطباعة 
-    يُجبر المتصفح على إعطاء مساحة ثابتة للرسوم بدلاً من انهيارها للصفر
-  */
-  .recharts-responsive-container {
-    width: 100% !important;
-    min-height: 350px !important;
-    display: block !important;
-  }
-
-  /* 
-    إصلاح مشكلة انقطاع مخطط الجسم (Body Chart) 
-    يجبر الصورة على الاحتفاظ بأبعادها وعدم تخطي حجم صفحة A4 
-  */
-  img, canvas {
-    max-width: 100% !important;
-    max-height: 240mm !important; /* هذا الارتفاع يمنع قص الرأس والأقدام */
-    object-fit: contain !important;
   }
 }
