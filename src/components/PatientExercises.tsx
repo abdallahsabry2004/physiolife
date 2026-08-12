@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, Plus, Trash2, Pencil, Printer } from "lucide-react";
+import { CheckCircle2, Circle, Plus, Trash2, Pencil, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import html2pdf from "html2pdf.js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -32,14 +33,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   const [frequency, setFrequency] = useState("");
   const [notes, setNotes] = useState("");
 
-  const [isPrintingHEP, setIsPrintingHEP] = useState(false);
-
-  // كود العزل الذكي لمنع تداخل هيدر المريض العام
-  useEffect(() => {
-    if (isPrintingHEP) document.body.classList.add("printing-isolated");
-    else document.body.classList.remove("printing-isolated");
-    return () => document.body.classList.remove("printing-isolated");
-  }, [isPrintingHEP]);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ["patient-min-hep", patientId],
@@ -191,16 +185,41 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setNotes("");
   };
 
-  const handlePrintProgram = () => {
+  // دالة تصدير الـ PDF الاحترافية
+  const handleExportPDF = async () => {
     if (assigned.length === 0) {
-      toast.error("No exercises assigned to print.");
+      toast.error("No exercises assigned to export.");
       return;
     }
-    setIsPrintingHEP(true);
+    
+    setIsGeneratingPDF(true);
+    
+    // إعطاء مهلة بسيطة للـ React عشان يرندر الـ Container المخفي في الـ DOM
     setTimeout(() => {
-      window.print();
-      setIsPrintingHEP(false);
-    }, 150);
+      const element = document.getElementById("hep-pdf-container");
+      if (!element) {
+        setIsGeneratingPDF(false);
+        toast.error("Failed to generate PDF. Container not found.");
+        return;
+      }
+
+      const opt = {
+        margin:       [10, 10, 15, 10], // ترك مساحة مناسبة للهوامش
+        filename:     `Home_Exercise_Program_${patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        setIsGeneratingPDF(false);
+        toast.success("PDF Downloaded successfully!");
+      }).catch((err: any) => {
+        setIsGeneratingPDF(false);
+        toast.error("An error occurred while generating the PDF.");
+        console.error(err);
+      });
+    }, 500);
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -210,109 +229,120 @@ export function PatientExercises({ patientId }: { patientId: string }) {
 
   return (
     <>
-      {/* ----------------- قالب طباعة البرنامج المنزلي (HEP) ----------------- */}
-      {isPrintingHEP && (
-        <div className="isolated-print-container fixed inset-0 z-[9999] bg-white p-8 overflow-y-auto block print:static print:block print:w-full print:h-auto print:overflow-visible print:p-0">
-          {/* Header */}
-<div className="h-6"></div>
-          <div className="border-b-2 border-primary pb-6 mb-8">
-            <div className="flex justify-between items-start">
+      {/* ----------------- قالب تصدير البرنامج المنزلي (PDF Export Container) ----------------- */}
+      {/* 
+        هذا الـ Container يتم عرضه في الـ DOM ولكن خارج الشاشة تماماً 
+        لكي تستطيع مكتبة html2pdf التقاطه بجودة عالية وبدون التأثير على واجهة المستخدم 
+      */}
+      {isGeneratingPDF && (
+        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+          <div id="hep-pdf-container" className="w-[800px] bg-white p-8 text-black">
+            
+            {/* Header مع تفاصيل العيادة المنقولة من الفوتر القديم */}
+            <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
               <div className="flex items-center gap-4">
-                <img src={logo} alt="Physio Life" className="h-20 w-20 object-contain" />
+                <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
                 <div>
-                  <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
+                  <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                    <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
+                    <p dir="ltr" className="mt-1">📞 01050359331</p>
+                  </div>
                 </div>
               </div>
               <div className="text-right">
                 <h3 className="text-2xl font-bold text-gray-800 tracking-wider">HOME EXERCISE PROGRAM</h3>
-                <p className="text-gray-500 mt-1">Date: {new Date().toLocaleDateString('en-GB')}</p>
-                <p className="text-gray-500">Therapist: {fullName}</p>
+                <p className="text-gray-500 mt-2 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
+                <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
               </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between">
+
+            {/* بيانات المريض */}
+            <div className="mb-6 flex justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
               <div>
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient Name</p>
-                <p className="text-xl font-bold mt-1">{patient?.full_name}</p>
+                <p className="text-xl font-bold mt-1 text-black">{patient?.full_name}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500 uppercase font-semibold">Patient ID</p>
-                <p className="text-lg font-medium mt-1">{patient?.code}</p>
+                <p className="text-lg font-bold mt-1 text-black">{patient?.code}</p>
               </div>
             </div>
-          </div>
 
-          {/* Guidelines / Tips */}
-          <div className="bg-secondary/20 p-4 rounded-lg border border-secondary mb-8 text-sm text-gray-800">
-            <p className="font-bold mb-2">💡 Guidelines for your Home Program:</p>
-            <ul className="list-disc list-inside space-y-1 ml-2">
-              <li>Perform exercises slowly and with control unless instructed otherwise.</li>
-              <li>Stop if you experience sharp or sudden pain and consult your therapist.</li>
-              <li>Breathe normally; do not hold your breath during exercises.</li>
-            </ul>
-          </div>
+            {/* Guidelines / Tips */}
+            <div className="bg-[#0f766e]/10 p-4 rounded-lg border border-[#0f766e]/30 mb-8 text-sm text-gray-800">
+              <p className="font-bold mb-2 text-[#0f766e]">💡 Guidelines for your Home Program:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2 font-medium">
+                <li>Perform exercises slowly and with control unless instructed otherwise.</li>
+                <li>Stop if you experience sharp or sudden pain and consult your therapist.</li>
+                <li>Breathe normally; do not hold your breath during exercises.</li>
+              </ul>
+            </div>
 
-          {/* Exercises List */}
-          <div className="space-y-6">
-            {assigned.map((pex, index) => (
-              <div key={pex.id} className="border-2 border-gray-200 rounded-xl p-5 break-inside-avoid">
-                <div className="flex justify-between items-start border-b pb-3 mb-4">
-                  <div>
-                    <h4 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      <span className="bg-primary text-primary-foreground h-6 w-6 rounded-full flex items-center justify-center text-sm">
-                        {index + 1}
-                      </span>
-                      {pex.exercises?.name ?? "Custom exercise"}
-                    </h4>
-                    {pex.exercises?.category && (
-                      <p className="text-sm text-gray-500 font-medium ml-8 mt-1">Target/Category: {pex.exercises.category}</p>
-                    )}
+            {/* Exercises List */}
+            <div className="space-y-6">
+              {assigned.map((pex, index) => (
+                <div key={pex.id} className="border-2 border-gray-200 rounded-xl p-5" style={{ pageBreakInside: 'avoid' }}>
+                  <div className="flex justify-between items-start border-b pb-3 mb-4">
+                    <div>
+                      <h4 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <span className="bg-[#0f766e] text-white h-7 w-7 rounded-full flex items-center justify-center text-sm">
+                          {index + 1}
+                        </span>
+                        {pex.exercises?.name ?? "Custom exercise"}
+                      </h4>
+                      {pex.exercises?.category && (
+                        <p className="text-sm text-gray-500 font-medium ml-9 mt-1">Target: {pex.exercises.category}</p>
+                      )}
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-3 gap-4 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Sets</p>
+                      <p className="text-lg font-bold text-[#0f766e]">{pex.sets || "-"}</p>
+                    </div>
+                    <div className="border-x border-gray-300">
+                      <p className="text-xs text-gray-500 uppercase font-bold">Repetitions</p>
+                      <p className="text-lg font-bold text-[#0f766e]">{pex.repetitions || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Frequency</p>
+                      <p className="text-lg font-bold text-[#0f766e]">{pex.frequency || "-"}</p>
+                    </div>
+                  </div>
+
+                  {pex.exercises?.instructions && (
+                    <div className="mb-3 pl-2 border-l-4 border-gray-300">
+                      <p className="text-sm font-bold text-gray-800 mb-1">Instructions:</p>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{pex.exercises.instructions}</p>
+                    </div>
+                  )}
+
+                  {pex.notes && (
+                    <div className="mt-3 bg-amber-50 border border-amber-200 p-3 rounded-md">
+                      <p className="text-sm font-bold text-amber-900 mb-1">Therapist Notes:</p>
+                      <p className="text-sm text-amber-800 leading-relaxed font-medium">{pex.notes}</p>
+                    </div>
+                  )}
                 </div>
+              ))}
+            </div>
 
-                <div className="grid grid-cols-3 gap-4 mb-4 bg-gray-50 p-3 rounded-lg border text-center">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase font-bold">Sets</p>
-                    <p className="text-lg font-semibold text-primary">{pex.sets || "-"}</p>
-                  </div>
-                  <div className="border-x border-gray-200">
-                    <p className="text-xs text-gray-500 uppercase font-bold">Repetitions</p>
-                    <p className="text-lg font-semibold text-primary">{pex.repetitions || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase font-bold">Frequency</p>
-                    <p className="text-lg font-semibold text-primary">{pex.frequency || "-"}</p>
-                  </div>
-                </div>
-
-                {pex.exercises?.instructions && (
-                  <div className="mb-3">
-                    <p className="text-sm font-bold text-gray-700 mb-1">Instructions:</p>
-                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{pex.exercises.instructions}</p>
-                  </div>
-                )}
-
-                {pex.notes && (
-                  <div className="mt-3 bg-amber-50 border border-amber-200 p-3 rounded-md">
-                    <p className="text-sm font-bold text-amber-800 mb-1">Therapist Notes:</p>
-                    <p className="text-sm text-amber-700 leading-relaxed">{pex.notes}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Footer */}
-          <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-            <p className="font-semibold text-gray-700 mb-1">Physio Life Physical Therapy Center</p>
-            <p>If you have any questions about your program, please contact the clinic.</p>
+            {/* Footer Text (العبارة الجميلة في النهاية) */}
+            <div className="mt-12 pt-6 border-t border-gray-200 text-center">
+              <p className="font-bold text-lg text-[#0f766e] mb-2">We wish you a speedy recovery!</p>
+              <p className="text-sm text-gray-600 font-medium">Physio Life PT Center - Your health is our priority.</p>
+              <p className="text-sm text-gray-500 mt-1">If you have any questions about your program, please contact the clinic.</p>
+            </div>
           </div>
         </div>
       )}
       {/* --------------------------------------------------------------------------------------- */}
 
-      {/* الواجهة العادية المخفية أثناء الطباعة */}
-      <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
+      {/* الواجهة الأساسية للتطبيق */}
+      <div className="space-y-6">
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -379,10 +409,24 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             <Badge variant="secondary">{doneCount} completions total</Badge>
           </div>
           
-          {/* زر الطباعة للبرنامج المنزلي */}
+          {/* زر التصدير كـ PDF بدلاً من الطباعة */}
           {assigned.length > 0 && (
-            <Button variant="outline" onClick={handlePrintProgram} className="shrink-0">
-              <Printer className="mr-2 h-4 w-4" /> Print HEP Sheet
+            <Button 
+              variant="outline" 
+              onClick={handleExportPDF} 
+              disabled={isGeneratingPDF}
+              className="shrink-0 font-semibold"
+            >
+              {isGeneratingPDF ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating PDF...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" /> Export as PDF
+                </>
+              )}
             </Button>
           )}
         </div>
@@ -470,5 +514,3 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     </>
   );
 }
-
-
