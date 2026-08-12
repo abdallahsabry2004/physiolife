@@ -154,7 +154,7 @@
   @page {
     size: A4 portrait;
     /* المسافة السفلية تحجز مكان الفوتر الثابت */
-    margin: 12mm 12mm 25mm 12mm;
+    margin: 12mm 12mm 15mm 12mm;
   }
 
   html,
@@ -247,7 +247,7 @@
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
-    min-height: 10mm;
+    min-height: 5mm;
     background-color: #fff !important;
     break-inside: avoid;
     page-break-inside: avoid;
