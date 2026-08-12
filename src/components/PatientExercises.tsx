@@ -304,7 +304,13 @@ export function PatientExercises({ patientId }: { patientId: string }) {
           </div>
         </div>
       )}
-
+      
+ {/* Footer */}
+          <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
+            <p className="font-semibold text-gray-700 mb-1">Physio Life Physical Therapy Center</p>
+            <p>If you have any questions about your program, please contact the clinic.</p>
+          </div>
+      
       <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
