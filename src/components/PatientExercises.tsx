@@ -199,7 +199,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setTimeout(() => {
       window.print();
       setIsPrintingHEP(false);
-    }, 300);
+    }, 500);
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -295,15 +295,15 @@ export function PatientExercises({ patientId }: { patientId: string }) {
             ))}
           </div>
 
-          <div className="print-footer">
-            <p className="font-bold">Physio Life Physical Therapy Center</p>
-            <p>123 Clinic Address Street, City, Country | Phone: +123456789 | Email: info@physiolife.com</p>
-            <p className="text-xs mt-1">If you have any questions about your program, please contact the clinic.</p>
+          <div className="print-footer hidden print:flex">
+            <p className="font-bold text-gray-800">Physio Life Physical Therapy Center</p>
+            <p className="text-gray-600">Phone: +123456789 | Email: info@physiolife.com</p>
+            <p className="text-xs text-gray-400 mt-1">If you have any questions about your program, please contact the clinic.</p>
           </div>
         </div>
       )}
 
-      <div className={isPrintingHEP ? "hidden" : "space-y-6"}>
+      <div className={isPrintingHEP ? "hidden" : "space-y-6 print:hidden"}>
         {canEditClinical && (
           <Card className={`${editingId ? "border-primary" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
