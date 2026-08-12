@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import logo from "@/assets/physio-life-logo.png";
-import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[cite: 1] استيراد المكون
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
   head: () => ({
@@ -79,7 +79,6 @@ function PatientDetail() {
     },
   });
 
-  // حالة لتخزين التعديلات المؤقتة لملاحظات الجلسة قبل حفظها
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, string>>({});
 
   const updateStatus = useMutation({
@@ -265,7 +264,7 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ترويسة الطباعة الأصلية كما طلبت */}
+      {/* ترويسة الطباعة الاحترافية مع العنوان والرقم وتنسيق 12 ساعة */}
       <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -273,10 +272,17 @@ function PatientDetail() {
             <div>
               <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
               <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+              <div className="mt-1 flex flex-col text-xs text-gray-500">
+                <span>📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</span>
+                <span>📞 للتواصل والحجز: 01050359331</span>
+              </div>
             </div>
           </div>
           <div className="text-right text-xs text-gray-500 space-y-1">
-            <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
+            <p>
+              <span className="font-semibold text-gray-700">Print Date:</span>{" "}
+              {new Date().toLocaleString('en-US', { hour12: true, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
             <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
           </div>
         </div>
@@ -397,7 +403,6 @@ function PatientDetail() {
             </div>
             <div className="space-y-2">
               <Label>Working diagnosis</Label>
-              {/*[cite: 1] استخدام المكون الذكي هنا لتسهيل إدخال التشخيص */}
               <MedicalAutocomplete
                 value={editForm.diagnosis}
                 onChange={(val) => setEditForm({ ...editForm, diagnosis: val })}
@@ -521,7 +526,6 @@ function PatientDetail() {
                   {(["subjective", "objective", "assessment", "plan"] as const).map((k) => (
                     <div key={k} className="space-y-2 print:space-y-0 relative">
                       <Label className="capitalize font-bold text-gray-700">{k}</Label>
-                      {/*[cite: 1] استبدال Textarea بمكون الاقتراحات مع توفير مساحة عرض مناسبة */}
                       {!canEditClinical ? (
                         <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0">
                           {s[k] || "—"}
@@ -529,7 +533,6 @@ function PatientDetail() {
                       ) : (
                         <div 
                           onBlur={(e) => {
-                            // نمنع تحديث القيمة إذا كان التركيز لا يزال داخل القائمة المنسدلة
                             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                               const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
                               if ((s[k] ?? "") !== draftValue) {
