@@ -158,7 +158,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
   return (
     <div className="space-y-6">
       <div>
-        {title && <h2 className="text-lg font-semibold">{title}</h2>}
+        <h2 className="text-lg font-semibold">{title}</h2>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
 
@@ -207,7 +207,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
           </p>
         )}
         {records.map((r) => (
-          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent overflow-visible break-inside-avoid">
+          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent overflow-visible">
             <CardContent className="pt-6 print:p-0 print:py-1 overflow-visible">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <Badge variant="secondary" className="print:bg-transparent print:border print:border-gray-300 print:text-black">{r.label}</Badge>
