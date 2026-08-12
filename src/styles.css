@@ -154,7 +154,7 @@
   @page {
     size: A4 portrait;
     /* المسافة السفلية تحجز مكان الفوتر الثابت */
-    margin: 12mm 12mm 15mm 12mm;
+    margin: 12mm 12mm 25mm 12mm;
   }
 
   html,
@@ -242,16 +242,19 @@
   .print-footer {
     display: flex !important;
     position: fixed !important;
-    bottom: 0mm !important;
+    bottom: -25mm !important;
     inset-inline: 0 !important;
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
-    min-height: 5mm;
+    min-height: 15mm;
     background-color: #fff !important;
     break-inside: avoid;
     page-break-inside: avoid;
     z-index: 999999 !important;
+    /* تنسيقات إضافية لضمان الشكل الاحترافي للفوتر */
+    padding-bottom: 5mm; 
+    border-top: 2px solid var(--color-primary); /* خط يفصل الفوتر بصرياً */
   }
 
   /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة والفوتر فقط */
