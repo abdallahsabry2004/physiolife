@@ -4,6 +4,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -130,6 +144,7 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
+
 }
 
 /* =========================================
@@ -138,7 +153,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    /* המסافة السفلية تحجز مكان الفوتر الثابت */
+    /* المسافة السفلية تحجز مكان الفوتر الثابت */
     margin: 12mm 12mm 30mm 12mm;
   }
 
@@ -158,50 +173,36 @@
     line-height: 1.45;
   }
 
-  /* إخفاء عناصر الواجهة غير المرغوب فيها أثناء الطباعة */
+  /* إخفاء عناصر الواجهة (قوائم/أزرار/إشعارات) */
   aside,
   nav,
   header.print-app-header,
   .print\:hidden,
-  [data-print-hide],
+  [data-print-hide] {
+    display: none !important;
+  }
+
   button:not(.print-keep) {
     display: none !important;
   }
 
-  /* -----------------------------------------------------------
-     العزل الذكي (Isolated Print) - يعمل فقط أثناء الطباعة
-  ----------------------------------------------------------- */
-  body.printing-isolated *:not(.isolated-print-container):not(.isolated-print-container *):not(.print-footer):not(.print-footer *) {
-    display: none !important;
-  }
-
-  body.printing-isolated .isolated-print-container {
+  /* تصفير تخطيط الشل حتى لا يعتمد على مقاس الشاشة (موبايل/تابلت/ديسكتوب) */
+  .print-shell,
+  .print-shell-content,
+  .print-shell-main {
     display: block !important;
     position: static !important;
+    float: none !important;
     width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: white;
-  }
-
-  /* -----------------------------------------------------------
-     الترويسة والتذييل الثابت (Fixed Header & Footer)
-  ----------------------------------------------------------- */
-  .print-footer {
-    display: flex !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    min-height: 20mm; /* مساحة للفوتر */
-    background-color: #fff !important;
-    border-top: 1px solid #ccc;
-    padding-top: 10px;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    z-index: 999999 !important;
+    inset: auto !important;
+    transform: none !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
 
   /* منع الظلال والحدود الملوّنة الزائدة */
@@ -214,17 +215,88 @@
     transition: none !important;
   }
 
+  img,
+  svg,
+  canvas {
+    max-width: 100% !important;
+    height: auto;
+  }
+
   /* نظافة تقسيم الصفحات */
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     break-after: avoid-page;
     page-break-after: avoid;
   }
 
-  tr, img, .break-inside-avoid, .card {
+  tr,
+  img,
+  .break-inside-avoid {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
+  /* الفوتر الثابت أسفل كل ورقة داخل هامش الصفحة */
+  .print-footer {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0mm !important;
+    inset-inline: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-height: 16mm;
+    background-color: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    z-index: 999999 !important;
+  }
+
+  /* حيلة العزل: إخفاء كل الموقع، وإظهار قالب الطباعة والفوتر فقط */
+  body.printing-isolated * {
+    visibility: hidden;
+  }
+  body.printing-isolated .isolated-print-container,
+  body.printing-isolated .isolated-print-container * {
+    visibility: visible;
+  }
+  body.printing-isolated .print-footer,
+  body.printing-isolated .print-footer * {
+    visibility: visible;
+  }
+
+  /* إزالة مساحات عناصر الشاشة من مسار قالب الطباعة المعزول بدل إخفائها بصرياً فقط */
+  body.printing-isolated *:has(.isolated-print-container)
+    > :not(:has(.isolated-print-container)):not(.isolated-print-container):not(.print-footer) {
+    display: none !important;
+  }
+
+  body.printing-isolated *:has(.isolated-print-container) {
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-isolated .isolated-print-container {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* إجبار مربعات النصوص (Textarea) على إظهار النص بالكامل وعدم قصه */
   textarea {
     height: auto !important;
     min-height: fit-content !important;
@@ -237,3 +309,6 @@
     background: transparent !important;
   }
 }
+
+
+
