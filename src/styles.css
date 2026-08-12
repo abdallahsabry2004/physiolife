@@ -247,7 +247,7 @@
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
-    min-height: 16mm;
+    min-height: 10mm;
     background-color: #fff !important;
     break-inside: avoid;
     page-break-inside: avoid;
