@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={cn(
           "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0",
           open ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
-          "ltr:lg:translate-x-0 rtl:lg:translate-x-0"
+          "ltr:lg:translate-x-0 rtl:lg:translate-x-0",
         )}
       >
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
@@ -81,7 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="text-sm font-bold leading-tight">{t("app.name")}</p>
             <p className="text-xs text-sidebar-foreground/60">{t("app.tagline")}</p>
           </div>
-          <button className="ms-auto lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
+          <button
+            className="ms-auto lg:hidden"
+            onClick={() => setOpen(false)}
+            aria-label="Close menu"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -155,7 +159,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <img src={logo} alt="" width={28} height={28} className="h-7 w-7" />
           <span className="font-semibold">{t("app.name")}</span>
-          <Link to="/notifications" className="ms-auto relative" aria-label={t("nav.notifications")}>
+          <Link
+            to="/notifications"
+            className="ms-auto relative"
+            aria-label={t("nav.notifications")}
+          >
             <Bell className="h-5 w-5" />
             {unread > 0 && (
               <span className="absolute -end-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
