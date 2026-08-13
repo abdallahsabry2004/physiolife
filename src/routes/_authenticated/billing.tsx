@@ -2,8 +2,9 @@ import { PageGuard } from "@/components/PageGuard";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Printer, Trash2, AlertTriangle, DollarSign, History, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, DollarSign, History, Search, ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import html2pdf from "html2pdf.js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { logActivityAsync } from "@/lib/logger"; 
@@ -56,14 +57,8 @@ function BillingPage() {
   const [deleteInvoiceModal, setDeleteInvoiceModal] = useState({ open: false, invoice: null as any, password: "" });
   
   const [printData, setPrintData] = useState<{ type: 'invoice' | 'payment' | 'history', data: any } | null>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState<string>("all");
-
-  // كود العزل الذكي لمنع تداخل هيدر الفاتورة
-  useEffect(() => {
-    if (printData) document.body.classList.add("printing-isolated");
-    else document.body.classList.remove("printing-isolated");
-    return () => document.body.classList.remove("printing-isolated");
-  }, [printData]);
 
   const [form, setForm] = useState({
     patient_id: "",
@@ -360,15 +355,46 @@ function BillingPage() {
     return { paidAmount, remaining };
   };
 
-  const handlePrint = (type: 'invoice' | 'payment', data: any) => {
+  const handleExportPDF = (type: 'invoice' | 'payment' | 'history', data: any) => {
+    setIsGeneratingPDF(true);
     setPrintData({ type, data });
+
     setTimeout(() => {
-      window.print();
-      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
-    }, 150);
+      const element = document.getElementById("billing-pdf-container");
+      if (!element) {
+        setIsGeneratingPDF(false);
+        setPrintData(null);
+        toast.error("Failed to generate PDF. Container not found.");
+        return;
+      }
+
+      let filename = "Document.pdf";
+      if (type === 'invoice') filename = `Invoice_${data.invoice_number}.pdf`;
+      if (type === 'payment') filename = `Receipt_${data.id.split('-')[0]}.pdf`;
+      if (type === 'history') filename = `Financial_History_${data.patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`;
+
+      const opt = {
+        margin:       [10, 10, 15, 10],
+        filename,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        setIsGeneratingPDF(false);
+        setPrintData(null);
+        toast.success("PDF Downloaded successfully!");
+      }).catch((err: any) => {
+        setIsGeneratingPDF(false);
+        setPrintData(null);
+        toast.error("An error occurred while generating the PDF.");
+        console.error(err);
+      });
+    }, 500);
   };
 
-  const handlePrintHistory = () => {
+  const handleExportHistoryPDF = () => {
     const patient = patients.find(p => p.id === selectedHistoryPatient);
     if (!patient || !patientHistory) return;
 
@@ -379,36 +405,32 @@ function BillingPage() {
     const totalPaid = historyPaymentsList.reduce((sum, pay) => sum + Number(pay.amount), 0);
     const totalRemaining = totalBilled - totalPaid;
 
-    setPrintData({
-      type: 'history',
-      data: {
-        patient,
-        invoices: historyInvoicesList,
-        payments: historyPaymentsList,
-        totalBilled,
-        totalPaid,
-        totalRemaining
-      }
+    handleExportPDF('history', {
+      patient,
+      invoices: historyInvoicesList,
+      payments: historyPaymentsList,
+      totalBilled,
+      totalPaid,
+      totalRemaining
     });
-
-    setTimeout(() => {
-      window.print();
-      setPrintData(null); // تفريغ البيانات لاستعادة الفوتر
-    }, 150);
   };
 
   return (
     <div className="space-y-6">
-      {/* ----------------- قوالب الطباعة ----------------- */}
+      {/* ----------------- قالب تصدير الفواتير والإيصالات (PDF Export Container) ----------------- */}
       {printData && (
-        <div className="isolated-print-container hidden print:block bg-white p-8">
-          <div className="border-b-2 border-primary pb-6 mb-6">
-            <div className="flex justify-between items-start">
+        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+          <div id="billing-pdf-container" className="w-[800px] bg-white p-8 text-black">
+            <div className="border-b-2 border-[#0f766e] pb-6 mb-6 flex justify-between items-start">
               <div className="flex items-center gap-4">
-                <img src={logo} alt="Physio Life" className="h-20 w-20" />
+                <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
                 <div>
-                  <h2 className="text-3xl font-bold text-primary">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
+                  <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                    <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
+                    <p dir="ltr" className="mt-1">📞 01050359331</p>
+                  </div>
                 </div>
               </div>
               <div className="text-right">
@@ -418,169 +440,171 @@ function BillingPage() {
                   {printData.type === 'history' && 'STATEMENT OF ACCOUNT'}
                 </h3>
                 {printData.type !== 'history' && (
-                  <p className="text-gray-500 mt-1">No: #{printData.data.id.split('-')[0]}</p>
+                  <p className="text-gray-500 mt-2 font-medium">No: #{printData.data.id.split('-')[0]}</p>
                 )}
-                <p className="text-gray-500">Date: {new Date().toLocaleDateString('en-GB')}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 space-y-6">
-            <div className="flex justify-between border-b pb-4">
-              <div>
-                <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
-                <p className="text-xl font-bold mt-1">
-                  {printData.type === 'history' 
-                    ? printData.data.patient.full_name 
-                    : (printData.data.patients as any)?.full_name}
-                </p>
-                <p className="text-sm text-gray-600">
-                  ID: {printData.type === 'history' 
-                        ? printData.data.patient.code 
-                        : (printData.data.patients as any)?.code}
-                </p>
+                <p className="text-gray-500 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
               </div>
             </div>
 
-            {printData.type === 'invoice' && (
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-6 rounded-lg border">
-                  <h4 className="font-bold text-lg mb-4 border-b pb-2">Invoice Details</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <p><span className="text-gray-500">Description:</span> {printData.data.description || "General Physical Therapy"}</p>
-                    <p><span className="text-gray-500">Sessions Count:</span> {printData.data.sessions_count || "N/A"}</p>
-                    <p><span className="text-gray-500">Subtotal:</span> EGP {Number(printData.data.subtotal).toLocaleString()}</p>
-                    <p><span className="text-gray-500">Discount:</span> EGP {Number(printData.data.discount).toLocaleString()}</p>
-                  </div>
-                  <div className="mt-4 pt-4 border-t flex justify-between items-center">
-                    <span className="text-gray-600 font-semibold text-lg">Total Amount:</span>
-                    <span className="text-2xl font-bold text-primary">EGP {Number(printData.data.total).toLocaleString()}</span>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between items-center p-4 border rounded-lg">
-                  <div>
-                    <p className="text-sm text-gray-500">Paid Amount</p>
-                    <p className="font-bold text-lg text-green-600">EGP {getInvoiceStats(printData.data).paidAmount.toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">Remaining Balance</p>
-                    <p className="font-bold text-lg text-destructive">EGP {getInvoiceStats(printData.data).remaining.toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {printData.type === 'payment' && (
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-6 rounded-lg border mb-4">
-                  <h4 className="font-bold text-lg mb-4 border-b pb-2">Payment Details</h4>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-semibold text-lg">Amount Received:</span>
-                    <span className="text-3xl font-bold text-primary">EGP {Number(printData.data.amount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center mt-4 text-sm">
-                    <span className="text-gray-600 font-medium">Payment Method:</span>
-                    <span className="font-bold uppercase">{printData.data.method}</span>
-                  </div>
-                </div>
-
-                {printData.data.invoices && (
-                  <div className="p-4 border rounded-lg text-sm">
-                    <h5 className="font-bold mb-2">Applied To Invoice:</h5>
-                    <p><span className="text-gray-500">Description:</span> {printData.data.invoices.description || "General"}</p>
-                    <p><span className="text-gray-500">Invoice Total:</span> EGP {Number(printData.data.invoices.total).toLocaleString()}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {printData.type === 'history' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 border rounded-lg text-center bg-gray-50">
-                    <p className="text-sm text-gray-500">Total Billed</p>
-                    <p className="text-xl font-bold text-primary">EGP {printData.data.totalBilled.toLocaleString()}</p>
-                  </div>
-                  <div className="p-4 border rounded-lg text-center bg-green-50">
-                    <p className="text-sm text-green-600">Total Paid</p>
-                    <p className="text-xl font-bold text-green-700">EGP {printData.data.totalPaid.toLocaleString()}</p>
-                  </div>
-                  <div className="p-4 border rounded-lg text-center bg-red-50">
-                    <p className="text-sm text-red-600">Outstanding Balance</p>
-                    <p className="text-xl font-bold text-red-700">EGP {printData.data.totalRemaining.toLocaleString()}</p>
-                  </div>
-                </div>
-
+            <div className="mt-8 space-y-6">
+              <div className="flex justify-between border-b border-gray-200 pb-4">
                 <div>
-                  <h4 className="font-bold text-lg border-b pb-2 mb-4">Invoices Summary</h4>
-                  <table className="w-full text-sm text-left">
-                    <thead>
-                      <tr className="border-b bg-gray-100">
-                        <th className="p-2">Date</th>
-                        <th className="p-2">Description</th>
-                        <th className="p-2">Total</th>
-                        <th className="p-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {printData.data.invoices.map((i: any) => (
-                        <tr key={i.id} className="border-b">
-                          <td className="p-2">{i.issue_date}</td>
-                          <td className="p-2">{i.description || "General"}</td>
-                          <td className="p-2">EGP {i.total}</td>
-                          <td className="p-2 capitalize">{i.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
+                  <p className="text-xl font-bold mt-1 text-black">
+                    {printData.type === 'history' 
+                      ? printData.data.patient.full_name 
+                      : (printData.data.patients as any)?.full_name}
+                  </p>
+                  <p className="text-sm text-gray-600 font-semibold">
+                    ID: {printData.type === 'history' 
+                          ? printData.data.patient.code 
+                          : (printData.data.patients as any)?.code}
+                  </p>
                 </div>
+              </div>
 
+              {printData.type === 'invoice' && (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">Invoice Details</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <p><span className="text-gray-500 font-semibold">Description:</span> {printData.data.description || "General Physical Therapy"}</p>
+                      <p><span className="text-gray-500 font-semibold">Sessions Count:</span> {printData.data.sessions_count || "N/A"}</p>
+                      <p><span className="text-gray-500 font-semibold">Subtotal:</span> EGP {Number(printData.data.subtotal).toLocaleString()}</p>
+                      <p><span className="text-gray-500 font-semibold">Discount:</span> EGP {Number(printData.data.discount).toLocaleString()}</p>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+                      <span className="text-gray-700 font-bold text-lg">Total Amount:</span>
+                      <span className="text-2xl font-bold text-[#0f766e]">EGP {Number(printData.data.total).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center p-5 border-2 border-gray-200 rounded-xl bg-white">
+                    <div>
+                      <p className="text-sm text-gray-500 font-semibold">Paid Amount</p>
+                      <p className="font-bold text-xl text-green-600">EGP {getInvoiceStats(printData.data).paidAmount.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500 font-semibold">Remaining Balance</p>
+                      <p className="font-bold text-xl text-red-600">EGP {getInvoiceStats(printData.data).remaining.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {printData.type === 'payment' && (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-4">
+                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">Payment Details</h4>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 font-bold text-lg">Amount Received:</span>
+                      <span className="text-3xl font-bold text-[#0f766e]">EGP {Number(printData.data.amount).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-4 text-sm">
+                      <span className="text-gray-600 font-semibold">Payment Method:</span>
+                      <span className="font-bold uppercase text-gray-900">{printData.data.method}</span>
+                    </div>
+                  </div>
+
+                  {printData.data.invoices && (
+                    <div className="p-5 border-2 border-gray-200 rounded-xl text-sm bg-white">
+                      <h5 className="font-bold text-gray-800 mb-3 border-b border-gray-100 pb-2">Applied To Invoice:</h5>
+                      <div className="flex justify-between">
+                        <p><span className="text-gray-500 font-semibold">Description:</span> {printData.data.invoices.description || "General"}</p>
+                        <p><span className="text-gray-500 font-semibold">Invoice Total:</span> <span className="font-bold text-black">EGP {Number(printData.data.invoices.total).toLocaleString()}</span></p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {printData.type === 'history' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-5 border border-gray-200 rounded-xl text-center bg-gray-50">
+                      <p className="text-sm text-gray-500 font-semibold">Total Billed</p>
+                      <p className="text-2xl font-bold text-[#0f766e] mt-1">EGP {printData.data.totalBilled.toLocaleString()}</p>
+                    </div>
+                    <div className="p-5 border border-green-200 rounded-xl text-center bg-green-50">
+                      <p className="text-sm text-green-700 font-semibold">Total Paid</p>
+                      <p className="text-2xl font-bold text-green-800 mt-1">EGP {printData.data.totalPaid.toLocaleString()}</p>
+                    </div>
+                    <div className="p-5 border border-red-200 rounded-xl text-center bg-red-50">
+                      <p className="text-sm text-red-700 font-semibold">Outstanding Balance</p>
+                      <p className="text-2xl font-bold text-red-800 mt-1">EGP {printData.data.totalRemaining.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div style={{ pageBreakInside: 'avoid' }}>
+                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4">Invoices Summary</h4>
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300 bg-gray-100">
+                          <th className="p-3 text-gray-700 font-bold">Date</th>
+                          <th className="p-3 text-gray-700 font-bold">Description</th>
+                          <th className="p-3 text-gray-700 font-bold">Total</th>
+                          <th className="p-3 text-gray-700 font-bold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printData.data.invoices.map((i: any) => (
+                          <tr key={i.id} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="p-3 text-gray-800">{i.issue_date}</td>
+                            <td className="p-3 text-gray-800 font-medium">{i.description || "General"}</td>
+                            <td className="p-3 font-bold text-gray-900">EGP {i.total}</td>
+                            <td className="p-3 capitalize font-semibold text-gray-700">{i.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ pageBreakInside: 'avoid' }}>
+                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4 mt-6">Payments Summary</h4>
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300 bg-gray-100">
+                          <th className="p-3 text-gray-700 font-bold">Date</th>
+                          <th className="p-3 text-gray-700 font-bold">Method</th>
+                          <th className="p-3 text-gray-700 font-bold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printData.data.payments.map((p: any) => (
+                          <tr key={p.id} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="p-3 text-gray-800">{p.paid_on}</td>
+                            <td className="p-3 uppercase font-medium text-gray-800">{p.method}</td>
+                            <td className="p-3 font-bold text-[#0f766e]">EGP {p.amount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-16 pt-8 border-t-2 border-dashed border-gray-300 flex justify-between items-end">
                 <div>
-                  <h4 className="font-bold text-lg border-b pb-2 mb-4">Payments Summary</h4>
-                  <table className="w-full text-sm text-left">
-                    <thead>
-                      <tr className="border-b bg-gray-100">
-                        <th className="p-2">Date</th>
-                        <th className="p-2">Method</th>
-                        <th className="p-2">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {printData.data.payments.map((p: any) => (
-                        <tr key={p.id} className="border-b">
-                          <td className="p-2">{p.paid_on}</td>
-                          <td className="p-2 uppercase">{p.method}</td>
-                          <td className="p-2 font-bold">EGP {p.amount}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <p className="text-sm text-gray-500 mb-1 font-semibold">Issued By (Staff)</p>
+                  <p className="font-bold text-lg text-gray-900">{fullName}</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-56 border-b-2 border-gray-800 mb-2"></div>
+                  <p className="text-sm text-gray-500 font-semibold">Authorized Signature</p>
                 </div>
               </div>
-            )}
-
-            <div className="mt-16 pt-8 border-t border-dashed flex justify-between items-end">
-              <div>
-                <p className="text-sm text-gray-500 mb-2">Issued By (Staff)</p>
-                <p className="font-bold text-lg">{fullName}</p>
+              
+              <div className="mt-12 text-center">
+                <p className="font-bold text-[#0f766e] text-lg mb-1">Thank you for choosing Physio Life PT Center.</p>
+                <p className="text-sm text-gray-500 font-medium">This is a computer-generated document and does not require a physical stamp.</p>
               </div>
-              <div className="text-center">
-                <div className="w-48 border-b-2 border-gray-800 mb-2"></div>
-                <p className="text-sm text-gray-500">Authorized Signature</p>
-              </div>
-            </div>
-            
-            <div className="mt-12 text-center text-xs text-gray-400">
-              <p>Thank you for choosing Physio Life PT Center.</p>
-              <p>This is a computer-generated document and does not require a physical stamp.</p>
             </div>
           </div>
         </div>
       )}
       {/* ---------------------------------------------------------------------------------------- */}
 
-      <div className={printData ? "hidden" : "space-y-6"}>
+      <div className="space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Billing & Payments</h1>
@@ -824,8 +848,14 @@ function BillingPage() {
                           </Button>
                         )}
                         
-                        <Button size="icon" variant="outline" className="h-8 w-8 ml-2" onClick={() => handlePrint('invoice', i)}>
-                          <Printer className="h-4 w-4" />
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="ml-2 font-medium" 
+                          onClick={() => handleExportPDF('invoice', i)}
+                          disabled={isGeneratingPDF}
+                        >
+                          <Download className="h-4 w-4 mr-1.5" /> PDF
                         </Button>
 
                         {canBill && (
@@ -893,8 +923,13 @@ function BillingPage() {
                     <div className="flex items-center gap-3">
                       <span className="font-bold text-primary">EGP {Number(p.amount).toLocaleString()}</span>
                       
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => handlePrint('payment', p)}>
-                        <Printer className="h-4 w-4 mr-2" /> Receipt
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => handleExportPDF('payment', p)}
+                        disabled={isGeneratingPDF}
+                      >
+                        <Download className="h-4 w-4 mr-1.5" /> PDF
                       </Button>
 
                       {canBill && (
@@ -970,8 +1005,14 @@ function BillingPage() {
                     </Select>
                   </div>
                   {selectedHistoryPatient !== "all" && (
-                    <Button onClick={handlePrintHistory} variant="outline" className="shrink-0">
-                      <Printer className="mr-2 h-4 w-4" /> Print Full History
+                    <Button 
+                      onClick={handleExportHistoryPDF} 
+                      variant="outline" 
+                      className="shrink-0 font-medium"
+                      disabled={isGeneratingPDF}
+                    >
+                      {isGeneratingPDF ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                      {isGeneratingPDF ? "Generating PDF..." : "Export Full History"}
                     </Button>
                   )}
                 </div>
@@ -1030,5 +1071,3 @@ function BillingPage() {
     </div>
   );
 }
-
-
