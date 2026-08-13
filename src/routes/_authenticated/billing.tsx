@@ -355,14 +355,22 @@ function BillingPage() {
     return { paidAmount, remaining };
   };
 
-  const handleExportPDF = async (type: 'invoice' | 'payment' | 'history', data: any) => {
+  const handleExportPDF = (type: 'invoice' | 'payment' | 'history', data: any) => {
     setIsGeneratingPDF(true);
     setPrintData({ type, data });
+    toast.info("Preparing PDF, please wait...");
 
-    setTimeout(async () => {
+    const safetyTimeout = setTimeout(() => {
+      setIsGeneratingPDF(false);
+      setPrintData(null);
+      toast.error("PDF generation timed out. Please try again.");
+    }, 10000);
+
+    setTimeout(() => {
       try {
         const element = document.getElementById("billing-pdf-container");
         if (!element) {
+          clearTimeout(safetyTimeout);
           setIsGeneratingPDF(false);
           setPrintData(null);
           toast.error("Failed to generate PDF. Container not found.");
@@ -378,18 +386,28 @@ function BillingPage() {
           margin:       [10, 10, 15, 10],
           filename,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, logging: true },
+          html2canvas:  { scale: 2, useCORS: true, allowTaint: true, logging: false },
           jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        await html2pdf().set(opt).from(element).save();
-        toast.success("PDF Downloaded successfully!");
-      } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error("An error occurred while generating the PDF.");
-      } finally {
+        html2pdf().set(opt).from(element).save().then(() => {
+          clearTimeout(safetyTimeout);
+          setIsGeneratingPDF(false);
+          setPrintData(null);
+          toast.success("PDF Downloaded successfully!");
+        }).catch((err: any) => {
+          clearTimeout(safetyTimeout);
+          setIsGeneratingPDF(false);
+          setPrintData(null);
+          toast.error("An error occurred while generating the PDF.");
+          console.error(err);
+        });
+      } catch (err) {
+        clearTimeout(safetyTimeout);
         setIsGeneratingPDF(false);
         setPrintData(null);
+        toast.error("Fatal error generating PDF.");
+        console.error(err);
       }
     }, 800);
   };
@@ -419,7 +437,7 @@ function BillingPage() {
     <div className="space-y-6">
       {/* ----------------- قالب تصدير الفواتير والإيصالات (PDF Export Container) ----------------- */}
       {printData && (
-        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
+        <div className="fixed left-[-9999px] top-[-9999px] overflow-visible pointer-events-none">
           <div id="billing-pdf-container" className="w-[800px] bg-white p-8 text-black">
             <div className="border-b-2 border-[#0f766e] pb-6 mb-6 flex justify-between items-start">
               <div className="flex items-center gap-4">
@@ -855,7 +873,7 @@ function BillingPage() {
                           onClick={() => handleExportPDF('invoice', i)}
                           disabled={isGeneratingPDF}
                         >
-                          <Download className="h-4 w-4 mr-1.5" /> PDF
+                          {isGeneratingPDF ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} PDF
                         </Button>
 
                         {canBill && (
@@ -929,7 +947,7 @@ function BillingPage() {
                         onClick={() => handleExportPDF('payment', p)}
                         disabled={isGeneratingPDF}
                       >
-                        <Download className="h-4 w-4 mr-1.5" /> PDF
+                        {isGeneratingPDF ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} PDF
                       </Button>
 
                       {canBill && (
