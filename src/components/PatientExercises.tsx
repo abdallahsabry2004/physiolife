@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Plus, Trash2, Pencil, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -185,7 +185,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setNotes("");
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (assigned.length === 0) {
       toast.error("No exercises assigned to export.");
       return;
@@ -194,47 +194,36 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     setIsGeneratingPDF(true);
     toast.info("Preparing PDF, please wait...");
     
-    // مؤقت أمان لفك تجميد الشاشة إذا علقت المكتبة
-    const safetyTimeout = setTimeout(() => {
-      setIsGeneratingPDF(false);
-      toast.error("PDF generation timed out. Please try again.");
-    }, 10000);
+    // إعطاء المتصفح مهلة لتحديث الواجهة قبل بدء عملية الـ PDF الثقيلة
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    setTimeout(() => {
-      try {
-        const element = document.getElementById("hep-pdf-container");
-        if (!element) {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.error("Failed to generate PDF. Container not found.");
-          return;
-        }
-
-        const opt = {
-          margin:       [10, 10, 15, 10],
-          filename:     `Home_Exercise_Program_${patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, allowTaint: true, logging: false },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        html2pdf().set(opt).from(element).save().then(() => {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.success("PDF Downloaded successfully!");
-        }).catch((err: any) => {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.error("An error occurred while generating the PDF.");
-          console.error(err);
-        });
-      } catch (err) {
-        clearTimeout(safetyTimeout);
-        setIsGeneratingPDF(false);
-        toast.error("Fatal error generating PDF.");
-        console.error(err);
+    try {
+      const element = document.getElementById("hep-pdf-container");
+      if (!element) {
+        throw new Error("Container not found.");
       }
-    }, 300);
+
+      const opt = {
+        margin:       [10, 10, 15, 10],
+        filename:     `Home_Exercise_Program_${patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          scrollY: 0, 
+          windowWidth: 800 
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+      toast.success("PDF Downloaded successfully!");
+    } catch (err) {
+      console.error("PDF Generation Error:", err);
+      toast.error("An error occurred while generating the PDF.");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -245,10 +234,8 @@ export function PatientExercises({ patientId }: { patientId: string }) {
   return (
     <>
       {/* ----------------- قالب تصدير البرنامج المنزلي (PDF Export Container) ----------------- */}
-      {/* هذا الـ Container دائم التواجد في الـ DOM لضمان تحميل الصور والخطوط قبل التصدير بدون تجميد المتصفح */}
-      <div className="fixed left-[-9999px] top-[-9999px] overflow-visible pointer-events-none">
-        <div id="hep-pdf-container" className="w-[800px] bg-white p-8 text-black">
-          
+      <div style={{ position: "absolute", left: "-10000px", top: 0, width: "800px", zIndex: -50 }}>
+        <div id="hep-pdf-container" className="bg-white p-8 text-black">
           <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
             <div className="flex items-center gap-4">
               <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
