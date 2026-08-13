@@ -355,43 +355,43 @@ function BillingPage() {
     return { paidAmount, remaining };
   };
 
-  const handleExportPDF = (type: 'invoice' | 'payment' | 'history', data: any) => {
+  const handleExportPDF = async (type: 'invoice' | 'payment' | 'history', data: any) => {
     setIsGeneratingPDF(true);
     setPrintData({ type, data });
 
-    setTimeout(() => {
-      const element = document.getElementById("billing-pdf-container");
-      if (!element) {
-        setIsGeneratingPDF(false);
-        setPrintData(null);
-        toast.error("Failed to generate PDF. Container not found.");
-        return;
-      }
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById("billing-pdf-container");
+        if (!element) {
+          setIsGeneratingPDF(false);
+          setPrintData(null);
+          toast.error("Failed to generate PDF. Container not found.");
+          return;
+        }
 
-      let filename = "Document.pdf";
-      if (type === 'invoice') filename = `Invoice_${data.invoice_number}.pdf`;
-      if (type === 'payment') filename = `Receipt_${data.id.split('-')[0]}.pdf`;
-      if (type === 'history') filename = `Financial_History_${data.patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`;
+        let filename = "Document.pdf";
+        if (type === 'invoice') filename = `Invoice_${data.invoice_number}.pdf`;
+        if (type === 'payment') filename = `Receipt_${data.id.split('-')[0]}.pdf`;
+        if (type === 'history') filename = `Financial_History_${data.patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`;
 
-      const opt = {
-        margin:       [10, 10, 15, 10],
-        filename,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+        const opt = {
+          margin:       [10, 10, 15, 10],
+          filename,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, logging: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
 
-      html2pdf().set(opt).from(element).save().then(() => {
-        setIsGeneratingPDF(false);
-        setPrintData(null);
+        await html2pdf().set(opt).from(element).save();
         toast.success("PDF Downloaded successfully!");
-      }).catch((err: any) => {
+      } catch (error) {
+        console.error("PDF Generation Error:", error);
+        toast.error("An error occurred while generating the PDF.");
+      } finally {
         setIsGeneratingPDF(false);
         setPrintData(null);
-        toast.error("An error occurred while generating the PDF.");
-        console.error(err);
-      });
-    }, 500);
+      }
+    }, 800);
   };
 
   const handleExportHistoryPDF = () => {
@@ -419,7 +419,7 @@ function BillingPage() {
     <div className="space-y-6">
       {/* ----------------- قالب تصدير الفواتير والإيصالات (PDF Export Container) ----------------- */}
       {printData && (
-        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
           <div id="billing-pdf-container" className="w-[800px] bg-white p-8 text-black">
             <div className="border-b-2 border-[#0f766e] pb-6 mb-6 flex justify-between items-start">
               <div className="flex items-center gap-4">
