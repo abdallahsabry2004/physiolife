@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Trash2, Edit, AlertTriangle, Eye } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import html2pdf from "html2pdf.js";
 import {
   Line,
   LineChart,
@@ -29,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import logo from "@/assets/physio-life-logo.png";
-import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[cite: 1] استيراد المكون
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
 
 export const Route = createFileRoute("/_authenticated/patients/$id")({
   head: () => ({
@@ -56,6 +57,8 @@ function PatientDetail() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ["patient", id],
@@ -79,7 +82,26 @@ function PatientDetail() {
     },
   });
 
-  // حالة لتخزين التعديلات المؤقتة لملاحظات الجلسة قبل حفظها
+  // استعلام إضافي لجلب البيانات الطبية لتكوين تقرير الـ PDF الشامل
+  const { data: reportRecords = [] } = useQuery({
+    queryKey: ["report-records", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("patient_records")
+        .select("*")
+        .eq("patient_id", id)
+        .is("session_id", null)
+        .order("sort_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // تقسيم البيانات للأقسام في الـ PDF
+  const historyRecs = reportRecords.filter(r => r.module === "history");
+  const examRecs = reportRecords.filter(r => r.module === "exam");
+  const diagRecs = reportRecords.filter(r => r.module === "diagnosis");
+
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, string>>({});
 
   const updateStatus = useMutation({
@@ -235,6 +257,36 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const handleExportPDF = async () => {
+    setIsGeneratingPDF(true);
+    
+    setTimeout(() => {
+      const element = document.getElementById("patient-report-pdf-container");
+      if (!element) {
+        setIsGeneratingPDF(false);
+        toast.error("Failed to generate PDF. Container not found.");
+        return;
+      }
+
+      const opt = {
+        margin:       [10, 10, 15, 10],
+        filename:     `Patient_Report_${patient?.full_name?.replace(/\s+/g, '_') || 'Report'}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(element).save().then(() => {
+        setIsGeneratingPDF(false);
+        toast.success("Medical Report Downloaded successfully!");
+      }).catch((err: any) => {
+        setIsGeneratingPDF(false);
+        toast.error("An error occurred while generating the PDF.");
+        console.error(err);
+      });
+    }, 500);
+  };
+
   const painSeries = [...sessions]
     .reverse()
     .filter((s) => s.pain_before !== null || s.pain_after !== null)
@@ -265,31 +317,116 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       
-      {/* ترويسة الطباعة الأصلية كما طلبت */}
-      <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-4">
-            <img src={logo} alt="Physio Life" className="h-16 w-16" />
-            <div>
-              <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
-              <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+      {/* ----------------- قالب تصدير التقرير الطبي الشامل (PDF Export Container) ----------------- */}
+      {isGeneratingPDF && (
+        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+          <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
+            
+            {/* Header */}
+            <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
+                <div>
+                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
+                  <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                    <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
+                    <p dir="ltr" className="mt-1">📞 01050359331</p>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">MEDICAL REPORT</h3>
+                <p className="text-gray-500 mt-2 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
+                <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
+              </div>
+            </div>
+
+            {/* Patient Info */}
+            <div className="mb-8 rounded-xl border-2 border-gray-200 p-5 bg-gray-50">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient Name</span> <span className="font-bold text-xl text-black">{patient.full_name}</span></p>
+                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient ID</span> <span className="font-bold text-lg text-black">{patient.code}</span></p>
+                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Age / Gender</span> <span className="font-semibold text-gray-900 text-base">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Diagnosis</span> <span className="font-semibold text-gray-900 text-base">{patient.diagnosis || "Not specified"}</span></p>
+              </div>
+            </div>
+
+            {/* History Section */}
+            {historyRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">1. Medical History</h4>
+                <div className="space-y-4">
+                  {historyRecs.map(r => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Examination Section */}
+            {examRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">2. Physical Examination</h4>
+                <div className="space-y-4">
+                  {examRecs.map(r => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Diagnosis & Plan Section */}
+            {diagRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">3. Diagnosis & Treatment Plan</h4>
+                <div className="space-y-4">
+                  {diagRecs.map(r => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sessions Overview (Latest 3) */}
+            {sessions.length > 0 && (
+              <div className="mb-6" style={{ pageBreakInside: 'avoid' }}>
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">4. Recent Treatment Sessions</h4>
+                <div className="space-y-4">
+                  {sessions.slice(0, 3).map(s => (
+                    <div key={s.id} className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <h5 className="font-bold text-md text-gray-900 mb-3 border-b border-gray-100 pb-2">Session #{s.session_number} — {s.session_date}</h5>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><span className="font-bold text-xs text-gray-500 uppercase">Subjective</span> <p className="text-sm text-gray-800 mt-1">{s.subjective || "—"}</p></div>
+                        <div><span className="font-bold text-xs text-gray-500 uppercase">Objective</span> <p className="text-sm text-gray-800 mt-1">{s.objective || "—"}</p></div>
+                        <div><span className="font-bold text-xs text-gray-500 uppercase">Assessment</span> <p className="text-sm text-gray-800 mt-1">{s.assessment || "—"}</p></div>
+                        <div><span className="font-bold text-xs text-gray-500 uppercase">Plan</span> <p className="text-sm text-gray-800 mt-1">{s.plan || "—"}</p></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Footer Text */}
+            <div className="mt-12 pt-6 border-t border-gray-200 text-center">
+              <p className="font-bold text-lg text-[#0f766e] mb-2">Physio Life PT Center</p>
+              <p className="text-sm text-gray-600 font-medium">Your health and progress are our top priority.</p>
+              <p className="text-sm text-gray-400 mt-1">This is an officially generated electronic medical report.</p>
             </div>
           </div>
-          <div className="text-right text-xs text-gray-500 space-y-1">
-            <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
-            <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
-          </div>
         </div>
-
-        <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
-          <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
-            <p><span className="font-semibold text-gray-500 mr-2">Patient Name:</span> <span className="font-bold text-lg">{patient.full_name}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Patient ID:</span> <span className="font-medium">{patient.code}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Age / Gender:</span> <span className="font-medium">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-            <p><span className="font-semibold text-gray-500 mr-2">Diagnosis:</span> <span className="font-medium">{patient.diagnosis || "Not specified"}</span></p>
-          </div>
-        </div>
-      </div>
+      )}
+      {/* --------------------------------------------------------------------------------------- */}
 
       <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
@@ -329,8 +466,9 @@ function PatientDetail() {
             </Badge>
           )}
 
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" /> Print Report
+          <Button variant="outline" onClick={handleExportPDF} disabled={isGeneratingPDF}>
+            {isGeneratingPDF ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isGeneratingPDF ? "Generating..." : "Export Report"}
           </Button>
 
           {canEditClinical && (
@@ -397,7 +535,6 @@ function PatientDetail() {
             </div>
             <div className="space-y-2">
               <Label>Working diagnosis</Label>
-              {/*[cite: 1] استخدام المكون الذكي هنا لتسهيل إدخال التشخيص */}
               <MedicalAutocomplete
                 value={editForm.diagnosis}
                 onChange={(val) => setEditForm({ ...editForm, diagnosis: val })}
@@ -465,7 +602,7 @@ function PatientDetail() {
       </Dialog>
 
       <Tabs defaultValue="history">
-        <TabsList className="flex h-auto flex-wrap justify-start">
+        <TabsList className="flex h-auto flex-wrap justify-start print:hidden">
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="exam">Examination</TabsTrigger>
           <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
@@ -498,9 +635,9 @@ function PatientDetail() {
             <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
           )}
           {sessions.map((s) => (
-            <Card key={s.id} className="print:mb-4 overflow-visible">
-              <CardHeader className="flex flex-row items-center justify-between pb-2 print:pb-1">
-                <CardTitle className="text-base font-bold text-primary print:text-black">
+            <Card key={s.id} className="overflow-visible">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base font-bold text-primary">
                   Session #{s.session_number} · {s.session_date}
                 </CardTitle>
                 {canEditClinical && (
@@ -516,20 +653,18 @@ function PatientDetail() {
                   </Button>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4 print:space-y-2 overflow-visible">
+              <CardContent className="space-y-4 overflow-visible">
                 <div className="grid gap-4 md:grid-cols-2">
                   {(["subjective", "objective", "assessment", "plan"] as const).map((k) => (
-                    <div key={k} className="space-y-2 print:space-y-0 relative">
+                    <div key={k} className="space-y-2 relative">
                       <Label className="capitalize font-bold text-gray-700">{k}</Label>
-                      {/*[cite: 1] استبدال Textarea بمكون الاقتراحات مع توفير مساحة عرض مناسبة */}
                       {!canEditClinical ? (
-                        <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent print:border-none print:p-0">
+                        <div className="text-sm p-3 border rounded-md min-h-[60px] bg-transparent">
                           {s[k] || "—"}
                         </div>
                       ) : (
                         <div 
                           onBlur={(e) => {
-                            // نمنع تحديث القيمة إذا كان التركيز لا يزال داخل القائمة المنسدلة
                             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                               const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
                               if ((s[k] ?? "") !== draftValue) {
@@ -548,16 +683,16 @@ function PatientDetail() {
                     </div>
                   ))}
                 </div>
-                <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 pt-2">
-                  <div className="space-y-2 print:space-y-0">
+                <div className="grid gap-4 sm:grid-cols-3 pt-2">
+                  <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Pain before (0-10)</Label>
                     <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_before ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_before: e.target.value ? Number(e.target.value) : null } })} />
                   </div>
-                  <div className="space-y-2 print:space-y-0">
+                  <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Pain after (0-10)</Label>
                     <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_after ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_after: e.target.value ? Number(e.target.value) : null } })} />
                   </div>
-                  <div className="space-y-2 print:space-y-0">
+                  <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Duration (min)</Label>
                     <Input type="number" disabled={!canEditClinical} defaultValue={s.duration_minutes ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { duration_minutes: e.target.value ? Number(e.target.value) : null } })} />
                   </div>
@@ -615,5 +750,3 @@ function PatientDetail() {
     </div>
   );
 }
-
-
