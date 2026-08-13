@@ -1,9 +1,9 @@
+import { format } from "date-fns";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import html2pdf from "html2pdf.js";
 import {
   Line,
   LineChart,
@@ -27,8 +27,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import logo from "@/assets/physio-life-logo.png";
 import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
 
@@ -53,11 +59,11 @@ function PatientDetail() {
   const qc = useQueryClient();
 
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState<any>({});
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-  
+
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const { data: patient } = useQuery({
@@ -82,6 +88,7 @@ function PatientDetail() {
     },
   });
 
+  // استعلام إضافي لجلب البيانات الطبية لتكوين تقرير الـ PDF الشامل
   const { data: reportRecords = [] } = useQuery({
     queryKey: ["report-records", id],
     queryFn: async () => {
@@ -96,9 +103,10 @@ function PatientDetail() {
     },
   });
 
-  const historyRecs = reportRecords.filter(r => r.module === "history");
-  const examRecs = reportRecords.filter(r => r.module === "exam");
-  const diagRecs = reportRecords.filter(r => r.module === "diagnosis");
+  // تقسيم البيانات للأقسام في الـ PDF
+  const historyRecs = reportRecords.filter((r) => r.module === "history");
+  const examRecs = reportRecords.filter((r) => r.module === "exam");
+  const diagRecs = reportRecords.filter((r) => r.module === "diagnosis");
 
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, string>>({});
 
@@ -112,7 +120,7 @@ function PatientDetail() {
         user_name: fullName,
         action: "UPDATE_PATIENT_STATUS",
         entity: `Patient: ${patient?.full_name}`,
-        details: { old_status: patient?.status, new_status: newStatus }
+        details: { old_status: patient?.status, new_status: newStatus },
       });
     },
     onSuccess: () => {
@@ -143,15 +151,15 @@ function PatientDetail() {
         user_name: fullName,
         action: "UPDATE_PATIENT_PROFILE",
         entity: `Patient: ${payload.full_name}`,
-        details: { old_data: patient, new_data: payload }
+        details: { old_data: patient, new_data: payload },
       });
     },
     onSuccess: () => {
       toast.success("Patient details updated");
       setEditOpen(false);
       void qc.invalidateQueries({ queryKey: ["patient", id] });
-      void qc.invalidateQueries({ queryKey: ["patients"] }); 
-      void qc.invalidateQueries({ queryKey: ["patients-min"] }); 
+      void qc.invalidateQueries({ queryKey: ["patients"] });
+      void qc.invalidateQueries({ queryKey: ["patients-min"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -159,14 +167,14 @@ function PatientDetail() {
   const deletePatient = useMutation({
     mutationFn: async () => {
       if (!user?.email) throw new Error("Email not found");
-      
+
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: user.email,
         password: deletePassword,
       });
       if (authError) throw new Error("Invalid password");
 
-      const { error: deleteError } = await supabase.rpc('delete_patient_completely', { p_id: id });
+      const { error: deleteError } = await supabase.rpc("delete_patient_completely", { p_id: id });
       if (deleteError) throw deleteError;
 
       logActivityAsync({
@@ -174,7 +182,7 @@ function PatientDetail() {
         user_name: fullName,
         action: "HARD_DELETE_PATIENT",
         entity: `Patient: ${patient?.full_name}`,
-        details: { patient_code: patient?.code, deleted_data: patient }
+        details: { patient_code: patient?.code, deleted_data: patient },
       });
     },
     onSuccess: () => {
@@ -203,7 +211,7 @@ function PatientDetail() {
         user_name: fullName,
         action: "CREATE_SESSION",
         entity: "Treatment Session",
-        details: { patient_id: id, session_number: sessionNum }
+        details: { patient_id: id, session_number: sessionNum },
       });
     },
     onSuccess: () => {
@@ -215,8 +223,11 @@ function PatientDetail() {
 
   const updateSession = useMutation({
     mutationFn: async ({ sid, patch }: { sid: string; patch: Record<string, unknown> }) => {
-      const oldSession = sessions.find(s => s.id === sid);
-      const { error } = await supabase.from("treatment_sessions").update(patch as never).eq("id", sid);
+      const oldSession = sessions.find((s) => s.id === sid);
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update(patch as never)
+        .eq("id", sid);
       if (error) throw error;
 
       logActivityAsync({
@@ -224,7 +235,7 @@ function PatientDetail() {
         user_name: fullName,
         action: "UPDATE_SESSION_DETAILS",
         entity: `Treatment Session #${oldSession?.session_number}`,
-        details: { patient_id: id, session_id: sid, updates_applied: patch }
+        details: { patient_id: id, session_id: sid, updates_applied: patch },
       });
     },
     onSuccess: () => {
@@ -236,7 +247,7 @@ function PatientDetail() {
 
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      const oldSession = sessions.find(s => s.id === sessionId);
+      const oldSession = sessions.find((s) => s.id === sessionId);
       const { error } = await supabase.from("treatment_sessions").delete().eq("id", sessionId);
       if (error) throw error;
 
@@ -245,7 +256,7 @@ function PatientDetail() {
         user_name: fullName,
         action: "DELETE_SESSION",
         entity: `Treatment Session #${oldSession?.session_number}`,
-        details: { patient_id: id, session_id: sessionId, deleted_data: oldSession }
+        details: { patient_id: id, session_id: sessionId, deleted_data: oldSession },
       });
     },
     onSuccess: () => {
@@ -255,50 +266,26 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     setIsGeneratingPDF(true);
-    toast.info("Preparing PDF, please wait...");
 
-    const safetyTimeout = setTimeout(() => {
+    try {
+      const { generatePDF } = await import("@/lib/pdf");
+      
+      // Wait for any UI updates to render
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      await generatePDF(
+        "patient-report-pdf-container", 
+        `Patient_Report_${patient?.full_name?.replace(/\s+/g, "_") || "Report"}.pdf`
+      );
+      toast.success("Medical Report Downloaded successfully!");
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      toast.error("An error occurred while generating the PDF.");
+    } finally {
       setIsGeneratingPDF(false);
-      toast.error("PDF generation timed out. Please try again.");
-    }, 10000);
-    
-    setTimeout(() => {
-      try {
-        const element = document.getElementById("patient-report-pdf-container");
-        if (!element) {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.error("Failed to generate PDF. Container not found.");
-          return;
-        }
-
-        const opt = {
-          margin:       [10, 10, 15, 10],
-          filename:     `Patient_Report_${patient?.full_name?.replace(/\s+/g, '_') || 'Report'}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, allowTaint: true, logging: false },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        html2pdf().set(opt).from(element).save().then(() => {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.success("Medical Report Downloaded successfully!");
-        }).catch((err: any) => {
-          clearTimeout(safetyTimeout);
-          setIsGeneratingPDF(false);
-          toast.error("An error occurred while generating the PDF.");
-          console.error(err);
-        });
-      } catch (err) {
-        clearTimeout(safetyTimeout);
-        setIsGeneratingPDF(false);
-        toast.error("Fatal error generating PDF.");
-        console.error(err);
-      }
-    }, 300);
+    }
   };
 
   const painSeries = [...sessions]
@@ -330,119 +317,204 @@ function PatientDetail() {
 
   return (
     <div className="space-y-6">
-      
       {/* ----------------- قالب تصدير التقرير الطبي الشامل (PDF Export Container) ----------------- */}
-      <div className="fixed left-[-9999px] top-[-9999px] overflow-visible pointer-events-none">
-        <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
-          
-          <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
-            <div className="flex items-center gap-4">
-              <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
-              <div>
-                <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
-                <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
-                <div className="text-xs text-gray-600 leading-relaxed font-semibold">
-                  <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
-                  <p dir="ltr" className="mt-1">📞 01050359331</p>
+      {isGeneratingPDF && (
+        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
+          <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
+            {/* Header */}
+            <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
+                <div>
+                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+                  <p className="text-sm font-medium text-gray-600 mb-2">
+                    Physical Therapy & Rehabilitation
+                  </p>
+                  <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                    <p dir="rtl">
+                      📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني
+                    </p>
+                    <p dir="ltr" className="mt-1">
+                      📞 01050359331
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="text-right">
-              <h3 className="text-2xl font-bold text-gray-800 tracking-wider">MEDICAL REPORT</h3>
-              <p className="text-gray-500 mt-2 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
-              <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
-            </div>
-          </div>
-
-          <div className="mb-8 rounded-xl border-2 border-gray-200 p-5 bg-gray-50">
-            <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
-              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient Name</span> <span className="font-bold text-xl text-black">{patient.full_name}</span></p>
-              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient ID</span> <span className="font-bold text-lg text-black">{patient.code}</span></p>
-              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Age / Gender</span> <span className="font-semibold text-gray-900 text-base">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Diagnosis</span> <span className="font-semibold text-gray-900 text-base">{patient.diagnosis || "Not specified"}</span></p>
-            </div>
-          </div>
-
-          {historyRecs.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">1. Medical History</h4>
-              <div className="space-y-4">
-                {historyRecs.map(r => (
-                  <div key={r.id}>
-                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                  </div>
-                ))}
+              <div className="text-right">
+                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">MEDICAL REPORT</h3>
+                <p className="text-gray-500 mt-2 font-medium">
+                  Date: {format(new Date(), "dd/MM/yyyy hh:mm a")}
+                </p>
+                <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
               </div>
             </div>
-          )}
 
-          {examRecs.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">2. Physical Examination</h4>
-              <div className="space-y-4">
-                {examRecs.map(r => (
-                  <div key={r.id}>
-                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                  </div>
-                ))}
+            {/* Patient Info */}
+            <div className="mb-8 rounded-xl border-2 border-gray-200 p-5 bg-gray-50">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                <p>
+                  <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
+                    Patient Name
+                  </span>{" "}
+                  <span className="font-bold text-xl text-black">{patient.full_name}</span>
+                </p>
+                <p>
+                  <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
+                    Patient ID
+                  </span>{" "}
+                  <span className="font-bold text-lg text-black">{patient.code}</span>
+                </p>
+                <p>
+                  <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
+                    Age / Gender
+                  </span>{" "}
+                  <span className="font-semibold text-gray-900 text-base">
+                    {patient.age || "-"} yrs / {patient.gender || "-"}
+                  </span>
+                </p>
+                <p>
+                  <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
+                    Diagnosis
+                  </span>{" "}
+                  <span className="font-semibold text-gray-900 text-base">
+                    {patient.diagnosis || "Not specified"}
+                  </span>
+                </p>
               </div>
             </div>
-          )}
 
-          {diagRecs.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">3. Diagnosis & Treatment Plan</h4>
-              <div className="space-y-4">
-                {diagRecs.map(r => (
-                  <div key={r.id}>
-                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {sessions.length > 0 && (
-            <div className="mb-6" style={{ pageBreakInside: 'avoid' }}>
-              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">4. Recent Treatment Sessions</h4>
-              <div className="space-y-4">
-                {sessions.slice(0, 3).map(s => (
-                  <div key={s.id} className="border border-gray-300 rounded-lg p-4 bg-white">
-                    <h5 className="font-bold text-md text-gray-900 mb-3 border-b border-gray-100 pb-2">Session #{s.session_number} — {s.session_date}</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><span className="font-bold text-xs text-gray-500 uppercase">Subjective</span> <p className="text-sm text-gray-800 mt-1">{s.subjective || "—"}</p></div>
-                      <div><span className="font-bold text-xs text-gray-500 uppercase">Objective</span> <p className="text-sm text-gray-800 mt-1">{s.objective || "—"}</p></div>
-                      <div><span className="font-bold text-xs text-gray-500 uppercase">Assessment</span> <p className="text-sm text-gray-800 mt-1">{s.assessment || "—"}</p></div>
-                      <div><span className="font-bold text-xs text-gray-500 uppercase">Plan</span> <p className="text-sm text-gray-800 mt-1">{s.plan || "—"}</p></div>
+            {/* History Section */}
+            {historyRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
+                  1. Medical History
+                </h4>
+                <div className="space-y-4">
+                  {historyRecs.map((r) => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-1">
+                        {r.value || "—"}
+                      </p>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="mt-12 pt-6 border-t border-gray-200 text-center">
-            <p className="font-bold text-lg text-[#0f766e] mb-2">Physio Life PT Center</p>
-            <p className="text-sm text-gray-600 font-medium">Your health and progress are our top priority.</p>
-            <p className="text-sm text-gray-400 mt-1">This is an officially generated electronic medical report.</p>
+            {/* Examination Section */}
+            {examRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
+                  2. Physical Examination
+                </h4>
+                <div className="space-y-4">
+                  {examRecs.map((r) => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-1">
+                        {r.value || "—"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Diagnosis & Plan Section */}
+            {diagRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
+                  3. Diagnosis & Treatment Plan
+                </h4>
+                <div className="space-y-4">
+                  {diagRecs.map((r) => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-1">
+                        {r.value || "—"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sessions Overview (Latest 3) */}
+            {sessions.length > 0 && (
+              <div className="mb-6" style={{ pageBreakInside: "avoid" }}>
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
+                  4. Recent Treatment Sessions
+                </h4>
+                <div className="space-y-4">
+                  {sessions.slice(0, 3).map((s) => (
+                    <div key={s.id} className="border border-gray-300 rounded-lg p-4 bg-white">
+                      <h5 className="font-bold text-md text-gray-900 mb-3 border-b border-gray-100 pb-2">
+                        Session #{s.session_number} — {s.session_date}
+                      </h5>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="font-bold text-xs text-gray-500 uppercase">
+                            Subjective
+                          </span>{" "}
+                          <p className="text-sm text-gray-800 mt-1">{s.subjective || "—"}</p>
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs text-gray-500 uppercase">
+                            Objective
+                          </span>{" "}
+                          <p className="text-sm text-gray-800 mt-1">{s.objective || "—"}</p>
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs text-gray-500 uppercase">
+                            Assessment
+                          </span>{" "}
+                          <p className="text-sm text-gray-800 mt-1">{s.assessment || "—"}</p>
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs text-gray-500 uppercase">Plan</span>{" "}
+                          <p className="text-sm text-gray-800 mt-1">{s.plan || "—"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Footer Text */}
+            <div className="mt-12 pt-6 border-t border-gray-200 text-center">
+              <p className="font-bold text-lg text-[#0f766e] mb-2">Physio Life PT Center</p>
+              <p className="text-sm text-gray-600 font-medium">
+                Your health and progress are our top priority.
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                This is an officially generated electronic medical report.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       {/* --------------------------------------------------------------------------------------- */}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
-          <Link to="/patients" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            to="/patients"
+            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-4 w-4" /> All patients
           </Link>
-          
+
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{patient.full_name}</h1>
             {canEditClinical && (
-              <Button variant="ghost" size="icon" onClick={openEditModal} className="text-muted-foreground hover:text-primary">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={openEditModal}
+                className="text-muted-foreground hover:text-primary"
+              >
                 <Edit className="h-4 w-4" />
               </Button>
             )}
@@ -453,7 +525,6 @@ function PatientDetail() {
           </p>
         </div>
         <div className="flex gap-2 items-center">
-          
           {canEditClinical ? (
             <Select value={patient.status} onValueChange={(val) => updateStatus.mutate(val)}>
               <SelectTrigger className="w-32 h-9 capitalize font-medium">
@@ -472,12 +543,22 @@ function PatientDetail() {
           )}
 
           <Button variant="outline" onClick={handleExportPDF} disabled={isGeneratingPDF}>
-            {isGeneratingPDF ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isGeneratingPDF ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
             {isGeneratingPDF ? "Generating..." : "Export Report"}
           </Button>
 
           {canEditClinical && (
-            <Button variant="destructive" onClick={() => { setDeletePassword(""); setDeleteOpen(true); }}>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDeletePassword("");
+                setDeleteOpen(true);
+              }}
+            >
               <Trash2 className="mr-2 h-4 w-4" /> Delete
             </Button>
           )}
@@ -507,8 +588,13 @@ function PatientDetail() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Gender</Label>
-                <Select value={editForm.gender} onValueChange={(v) => setEditForm({ ...editForm, gender: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <Select
+                  value={editForm.gender}
+                  onValueChange={(v) => setEditForm({ ...editForm, gender: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
@@ -577,8 +663,9 @@ function PatientDetail() {
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <p className="text-sm text-muted-foreground">
-              Are you absolutely sure you want to delete <strong>{patient.full_name}</strong>? 
-              This action cannot be undone. All clinical records, sessions, and files associated with this patient will be permanently removed.
+              Are you absolutely sure you want to delete <strong>{patient.full_name}</strong>? This
+              action cannot be undone. All clinical records, sessions, and files associated with
+              this patient will be permanently removed.
             </p>
             <div className="space-y-2">
               <Label htmlFor="auth-password">Enter your password to confirm</Label>
@@ -591,12 +678,18 @@ function PatientDetail() {
               />
             </div>
             <div className="flex gap-2 justify-end mt-4">
-              <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeletePassword(""); }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setDeletePassword("");
+                }}
+              >
                 Cancel
               </Button>
-              <Button 
-                variant="destructive" 
-                disabled={deletePatient.isPending || !deletePassword} 
+              <Button
+                variant="destructive"
+                disabled={deletePatient.isPending || !deletePassword}
                 onClick={() => deletePatient.mutate()}
               >
                 {deletePatient.isPending ? "Deleting..." : "Confirm Delete"}
@@ -607,7 +700,7 @@ function PatientDetail() {
       </Dialog>
 
       <Tabs defaultValue="history">
-        <TabsList className="flex h-auto flex-wrap justify-start">
+        <TabsList className="flex h-auto flex-wrap justify-start print:hidden">
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="exam">Examination</TabsTrigger>
           <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
@@ -621,18 +714,32 @@ function PatientDetail() {
         </TabsList>
 
         <TabsContent value="history" className="mt-6">
-          <ClinicalModule patientId={id} module="history" title="Complete medical history" description="Add only the items relevant to this patient — suggestions below, or type your own." />
+          <ClinicalModule
+            patientId={id}
+            module="history"
+            title="Complete medical history"
+            description="Add only the items relevant to this patient — suggestions below, or type your own."
+          />
         </TabsContent>
         <TabsContent value="exam" className="mt-6">
-          <ClinicalModule patientId={id} module="exam" title="Physical examination" description="Vital signs, observation, ROM, strength, neurological and special tests." />
+          <ClinicalModule
+            patientId={id}
+            module="exam"
+            title="Physical examination"
+            description="Vital signs, observation, ROM, strength, neurological and special tests."
+          />
         </TabsContent>
         <TabsContent value="diagnosis" className="mt-6">
-          <ClinicalModule patientId={id} module="diagnosis" title="Diagnosis, goals and treatment plan" />
+          <ClinicalModule
+            patientId={id}
+            module="diagnosis"
+            title="Diagnosis, goals and treatment plan"
+          />
         </TabsContent>
 
         <TabsContent value="sessions" className="mt-6 space-y-4">
           {canEditClinical && (
-            <Button onClick={() => newSession.mutate()}>
+            <Button onClick={() => newSession.mutate()} className="print:hidden">
               <Plus className="mr-2 h-4 w-4" /> Open a new visit
             </Button>
           )}
@@ -647,9 +754,15 @@ function PatientDetail() {
                 </CardTitle>
                 {canEditClinical && (
                   <Button
-                    variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive"
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive print:hidden"
                     onClick={() => {
-                      if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
+                      if (
+                        confirm(
+                          "Are you sure you want to delete this session? This action cannot be undone.",
+                        )
+                      ) {
                         deleteSession.mutate(s.id);
                       }
                     }}
@@ -668,7 +781,7 @@ function PatientDetail() {
                           {s[k] || "—"}
                         </div>
                       ) : (
-                        <div 
+                        <div
                           onBlur={(e) => {
                             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                               const draftValue = sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? "";
@@ -680,7 +793,9 @@ function PatientDetail() {
                         >
                           <MedicalAutocomplete
                             value={sessionDrafts[`${s.id}-${k}`] ?? s[k] ?? ""}
-                            onChange={(val) => setSessionDrafts(prev => ({ ...prev, [`${s.id}-${k}`]: val }))}
+                            onChange={(val) =>
+                              setSessionDrafts((prev) => ({ ...prev, [`${s.id}-${k}`]: val }))
+                            }
                             placeholder={`Enter ${k} notes...`}
                           />
                         </div>
@@ -691,19 +806,60 @@ function PatientDetail() {
                 <div className="grid gap-4 sm:grid-cols-3 pt-2">
                   <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Pain before (0-10)</Label>
-                    <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_before ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_before: e.target.value ? Number(e.target.value) : null } })} />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10}
+                      disabled={!canEditClinical}
+                      defaultValue={s.pain_before ?? ""}
+                      onBlur={(e) =>
+                        updateSession.mutate({
+                          sid: s.id,
+                          patch: { pain_before: e.target.value ? Number(e.target.value) : null },
+                        })
+                      }
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Pain after (0-10)</Label>
-                    <Input type="number" min={0} max={10} disabled={!canEditClinical} defaultValue={s.pain_after ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { pain_after: e.target.value ? Number(e.target.value) : null } })} />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10}
+                      disabled={!canEditClinical}
+                      defaultValue={s.pain_after ?? ""}
+                      onBlur={(e) =>
+                        updateSession.mutate({
+                          sid: s.id,
+                          patch: { pain_after: e.target.value ? Number(e.target.value) : null },
+                        })
+                      }
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold text-gray-700">Duration (min)</Label>
-                    <Input type="number" disabled={!canEditClinical} defaultValue={s.duration_minutes ?? ""} onBlur={(e) => updateSession.mutate({ sid: s.id, patch: { duration_minutes: e.target.value ? Number(e.target.value) : null } })} />
+                    <Input
+                      type="number"
+                      disabled={!canEditClinical}
+                      defaultValue={s.duration_minutes ?? ""}
+                      onBlur={(e) =>
+                        updateSession.mutate({
+                          sid: s.id,
+                          patch: {
+                            duration_minutes: e.target.value ? Number(e.target.value) : null,
+                          },
+                        })
+                      }
+                    />
                   </div>
                 </div>
                 <div className="pt-2">
-                  <ClinicalModule patientId={id} module="session" sessionId={s.id} title="Interventions performed" />
+                  <ClinicalModule
+                    patientId={id}
+                    module="session"
+                    sessionId={s.id}
+                    title="Interventions performed"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -716,17 +872,26 @@ function PatientDetail() {
 
         <TabsContent value="progress" className="mt-6">
           <Card>
-            <CardHeader><CardTitle className="text-base">Pain across sessions</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Pain across sessions</CardTitle>
+            </CardHeader>
             <CardContent className="h-72">
               {painSeries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Record pain before/after in sessions to build the graph.</p>
+                <p className="text-sm text-muted-foreground">
+                  Record pain before/after in sessions to build the graph.
+                </p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={painSeries}>
                     <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
                     <YAxis domain={[0, 10]} stroke="currentColor" fontSize={12} />
                     <ChartTooltip />
-                    <Line type="monotone" dataKey="before" stroke="var(--chart-1)" strokeWidth={2} />
+                    <Line
+                      type="monotone"
+                      dataKey="before"
+                      stroke="var(--chart-1)"
+                      strokeWidth={2}
+                    />
                     <Line type="monotone" dataKey="after" stroke="var(--chart-2)" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -750,7 +915,6 @@ function PatientDetail() {
         <TabsContent value="files" className="mt-6">
           <PatientFiles patientId={id} />
         </TabsContent>
-
       </Tabs>
     </div>
   );
