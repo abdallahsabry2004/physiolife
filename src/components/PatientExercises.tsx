@@ -194,32 +194,32 @@ export function PatientExercises({ patientId }: { patientId: string }) {
     
     setIsGeneratingPDF(true);
     
-    // إعطاء مهلة بسيطة للـ React عشان يرندر الـ Container المخفي في الـ DOM
-    setTimeout(() => {
-      const element = document.getElementById("hep-pdf-container");
-      if (!element) {
-        setIsGeneratingPDF(false);
-        toast.error("Failed to generate PDF. Container not found.");
-        return;
-      }
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById("hep-pdf-container");
+        if (!element) {
+          setIsGeneratingPDF(false);
+          toast.error("Failed to generate PDF. Container not found.");
+          return;
+        }
 
-      const opt = {
-        margin:       [10, 10, 15, 10], // ترك مساحة مناسبة للهوامش
-        filename:     `Home_Exercise_Program_${patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+        const opt = {
+          margin:       [10, 10, 15, 10],
+          filename:     `Home_Exercise_Program_${patient?.full_name?.replace(/\s+/g, '_') || 'Patient'}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, logging: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
 
-      html2pdf().set(opt).from(element).save().then(() => {
-        setIsGeneratingPDF(false);
+        await html2pdf().set(opt).from(element).save();
         toast.success("PDF Downloaded successfully!");
-      }).catch((err: any) => {
-        setIsGeneratingPDF(false);
+      } catch (error) {
+        console.error("PDF Generation Error:", error);
         toast.error("An error occurred while generating the PDF.");
-        console.error(err);
-      });
-    }, 500);
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 800);
   };
 
   const doneCount = logs.filter((l) => l.completed).length;
@@ -235,7 +235,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
         لكي تستطيع مكتبة html2pdf التقاطه بجودة عالية وبدون التأثير على واجهة المستخدم 
       */}
       {isGeneratingPDF && (
-        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
           <div id="hep-pdf-container" className="w-[800px] bg-white p-8 text-black">
             
             {/* Header مع تفاصيل العيادة المنقولة من الفوتر القديم */}
