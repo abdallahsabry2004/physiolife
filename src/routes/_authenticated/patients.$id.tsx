@@ -82,7 +82,6 @@ function PatientDetail() {
     },
   });
 
-  // استعلام إضافي لجلب البيانات الطبية لتكوين تقرير الـ PDF الشامل
   const { data: reportRecords = [] } = useQuery({
     queryKey: ["report-records", id],
     queryFn: async () => {
@@ -97,7 +96,6 @@ function PatientDetail() {
     },
   });
 
-  // تقسيم البيانات للأقسام في الـ PDF
   const historyRecs = reportRecords.filter(r => r.module === "history");
   const examRecs = reportRecords.filter(r => r.module === "exam");
   const diagRecs = reportRecords.filter(r => r.module === "diagnosis");
@@ -257,13 +255,20 @@ function PatientDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = () => {
     setIsGeneratingPDF(true);
+    toast.info("Preparing PDF, please wait...");
+
+    const safetyTimeout = setTimeout(() => {
+      setIsGeneratingPDF(false);
+      toast.error("PDF generation timed out. Please try again.");
+    }, 10000);
     
-    setTimeout(async () => {
+    setTimeout(() => {
       try {
         const element = document.getElementById("patient-report-pdf-container");
         if (!element) {
+          clearTimeout(safetyTimeout);
           setIsGeneratingPDF(false);
           toast.error("Failed to generate PDF. Container not found.");
           return;
@@ -273,19 +278,27 @@ function PatientDetail() {
           margin:       [10, 10, 15, 10],
           filename:     `Patient_Report_${patient?.full_name?.replace(/\s+/g, '_') || 'Report'}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, logging: true },
+          html2canvas:  { scale: 2, useCORS: true, allowTaint: true, logging: false },
           jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        await html2pdf().set(opt).from(element).save();
-        toast.success("Medical Report Downloaded successfully!");
-      } catch (error) {
-        console.error("PDF Generation Error:", error);
-        toast.error("An error occurred while generating the PDF.");
-      } finally {
+        html2pdf().set(opt).from(element).save().then(() => {
+          clearTimeout(safetyTimeout);
+          setIsGeneratingPDF(false);
+          toast.success("Medical Report Downloaded successfully!");
+        }).catch((err: any) => {
+          clearTimeout(safetyTimeout);
+          setIsGeneratingPDF(false);
+          toast.error("An error occurred while generating the PDF.");
+          console.error(err);
+        });
+      } catch (err) {
+        clearTimeout(safetyTimeout);
         setIsGeneratingPDF(false);
+        toast.error("Fatal error generating PDF.");
+        console.error(err);
       }
-    }, 800);
+    }, 300);
   };
 
   const painSeries = [...sessions]
@@ -319,117 +332,108 @@ function PatientDetail() {
     <div className="space-y-6">
       
       {/* ----------------- قالب تصدير التقرير الطبي الشامل (PDF Export Container) ----------------- */}
-      {isGeneratingPDF && (
-        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
-          <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
-            
-            {/* Header */}
-            <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
-                <div>
-                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
-                  <div className="text-xs text-gray-600 leading-relaxed font-semibold">
-                    <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
-                    <p dir="ltr" className="mt-1">📞 01050359331</p>
-                  </div>
+      <div className="fixed left-[-9999px] top-[-9999px] overflow-visible pointer-events-none">
+        <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
+          
+          <div className="border-b-2 border-[#0f766e] pb-6 mb-8 flex justify-between items-start">
+            <div className="flex items-center gap-4">
+              <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
+              <div>
+                <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+                <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
+                <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                  <p dir="rtl">📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني</p>
+                  <p dir="ltr" className="mt-1">📞 01050359331</p>
                 </div>
-              </div>
-              <div className="text-right">
-                <h3 className="text-2xl font-bold text-gray-800 tracking-wider">MEDICAL REPORT</h3>
-                <p className="text-gray-500 mt-2 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
-                <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
               </div>
             </div>
-
-            {/* Patient Info */}
-            <div className="mb-8 rounded-xl border-2 border-gray-200 p-5 bg-gray-50">
-              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
-                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient Name</span> <span className="font-bold text-xl text-black">{patient.full_name}</span></p>
-                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient ID</span> <span className="font-bold text-lg text-black">{patient.code}</span></p>
-                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Age / Gender</span> <span className="font-semibold text-gray-900 text-base">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
-                <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Diagnosis</span> <span className="font-semibold text-gray-900 text-base">{patient.diagnosis || "Not specified"}</span></p>
-              </div>
-            </div>
-
-            {/* History Section */}
-            {historyRecs.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">1. Medical History</h4>
-                <div className="space-y-4">
-                  {historyRecs.map(r => (
-                    <div key={r.id}>
-                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Examination Section */}
-            {examRecs.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">2. Physical Examination</h4>
-                <div className="space-y-4">
-                  {examRecs.map(r => (
-                    <div key={r.id}>
-                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Diagnosis & Plan Section */}
-            {diagRecs.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">3. Diagnosis & Treatment Plan</h4>
-                <div className="space-y-4">
-                  {diagRecs.map(r => (
-                    <div key={r.id}>
-                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Sessions Overview (Latest 3) */}
-            {sessions.length > 0 && (
-              <div className="mb-6" style={{ pageBreakInside: 'avoid' }}>
-                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">4. Recent Treatment Sessions</h4>
-                <div className="space-y-4">
-                  {sessions.slice(0, 3).map(s => (
-                    <div key={s.id} className="border border-gray-300 rounded-lg p-4 bg-white">
-                      <h5 className="font-bold text-md text-gray-900 mb-3 border-b border-gray-100 pb-2">Session #{s.session_number} — {s.session_date}</h5>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div><span className="font-bold text-xs text-gray-500 uppercase">Subjective</span> <p className="text-sm text-gray-800 mt-1">{s.subjective || "—"}</p></div>
-                        <div><span className="font-bold text-xs text-gray-500 uppercase">Objective</span> <p className="text-sm text-gray-800 mt-1">{s.objective || "—"}</p></div>
-                        <div><span className="font-bold text-xs text-gray-500 uppercase">Assessment</span> <p className="text-sm text-gray-800 mt-1">{s.assessment || "—"}</p></div>
-                        <div><span className="font-bold text-xs text-gray-500 uppercase">Plan</span> <p className="text-sm text-gray-800 mt-1">{s.plan || "—"}</p></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Footer Text */}
-            <div className="mt-12 pt-6 border-t border-gray-200 text-center">
-              <p className="font-bold text-lg text-[#0f766e] mb-2">Physio Life PT Center</p>
-              <p className="text-sm text-gray-600 font-medium">Your health and progress are our top priority.</p>
-              <p className="text-sm text-gray-400 mt-1">This is an officially generated electronic medical report.</p>
+            <div className="text-right">
+              <h3 className="text-2xl font-bold text-gray-800 tracking-wider">MEDICAL REPORT</h3>
+              <p className="text-gray-500 mt-2 font-medium">Date: {new Date().toLocaleDateString('en-GB')}</p>
+              <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
             </div>
           </div>
+
+          <div className="mb-8 rounded-xl border-2 border-gray-200 p-5 bg-gray-50">
+            <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient Name</span> <span className="font-bold text-xl text-black">{patient.full_name}</span></p>
+              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Patient ID</span> <span className="font-bold text-lg text-black">{patient.code}</span></p>
+              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Age / Gender</span> <span className="font-semibold text-gray-900 text-base">{patient.age || "-"} yrs / {patient.gender || "-"}</span></p>
+              <p><span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">Diagnosis</span> <span className="font-semibold text-gray-900 text-base">{patient.diagnosis || "Not specified"}</span></p>
+            </div>
+          </div>
+
+          {historyRecs.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">1. Medical History</h4>
+              <div className="space-y-4">
+                {historyRecs.map(r => (
+                  <div key={r.id}>
+                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {examRecs.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">2. Physical Examination</h4>
+              <div className="space-y-4">
+                {examRecs.map(r => (
+                  <div key={r.id}>
+                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {diagRecs.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">3. Diagnosis & Treatment Plan</h4>
+              <div className="space-y-4">
+                {diagRecs.map(r => (
+                  <div key={r.id}>
+                    <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{r.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {sessions.length > 0 && (
+            <div className="mb-6" style={{ pageBreakInside: 'avoid' }}>
+              <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">4. Recent Treatment Sessions</h4>
+              <div className="space-y-4">
+                {sessions.slice(0, 3).map(s => (
+                  <div key={s.id} className="border border-gray-300 rounded-lg p-4 bg-white">
+                    <h5 className="font-bold text-md text-gray-900 mb-3 border-b border-gray-100 pb-2">Session #{s.session_number} — {s.session_date}</h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><span className="font-bold text-xs text-gray-500 uppercase">Subjective</span> <p className="text-sm text-gray-800 mt-1">{s.subjective || "—"}</p></div>
+                      <div><span className="font-bold text-xs text-gray-500 uppercase">Objective</span> <p className="text-sm text-gray-800 mt-1">{s.objective || "—"}</p></div>
+                      <div><span className="font-bold text-xs text-gray-500 uppercase">Assessment</span> <p className="text-sm text-gray-800 mt-1">{s.assessment || "—"}</p></div>
+                      <div><span className="font-bold text-xs text-gray-500 uppercase">Plan</span> <p className="text-sm text-gray-800 mt-1">{s.plan || "—"}</p></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-12 pt-6 border-t border-gray-200 text-center">
+            <p className="font-bold text-lg text-[#0f766e] mb-2">Physio Life PT Center</p>
+            <p className="text-sm text-gray-600 font-medium">Your health and progress are our top priority.</p>
+            <p className="text-sm text-gray-400 mt-1">This is an officially generated electronic medical report.</p>
+          </div>
         </div>
-      )}
+      </div>
       {/* --------------------------------------------------------------------------------------- */}
 
-      <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/patients" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> All patients
@@ -603,7 +607,7 @@ function PatientDetail() {
       </Dialog>
 
       <Tabs defaultValue="history">
-        <TabsList className="flex h-auto flex-wrap justify-start print:hidden">
+        <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="exam">Examination</TabsTrigger>
           <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
@@ -628,7 +632,7 @@ function PatientDetail() {
 
         <TabsContent value="sessions" className="mt-6 space-y-4">
           {canEditClinical && (
-            <Button onClick={() => newSession.mutate()} className="print:hidden">
+            <Button onClick={() => newSession.mutate()}>
               <Plus className="mr-2 h-4 w-4" /> Open a new visit
             </Button>
           )}
@@ -643,7 +647,7 @@ function PatientDetail() {
                 </CardTitle>
                 {canEditClinical && (
                   <Button
-                    variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive print:hidden"
+                    variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive"
                     onClick={() => {
                       if (confirm("Are you sure you want to delete this session? This action cannot be undone.")) {
                         deleteSession.mutate(s.id);
