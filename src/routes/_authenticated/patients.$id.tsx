@@ -260,31 +260,32 @@ function PatientDetail() {
   const handleExportPDF = async () => {
     setIsGeneratingPDF(true);
     
-    setTimeout(() => {
-      const element = document.getElementById("patient-report-pdf-container");
-      if (!element) {
-        setIsGeneratingPDF(false);
-        toast.error("Failed to generate PDF. Container not found.");
-        return;
-      }
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById("patient-report-pdf-container");
+        if (!element) {
+          setIsGeneratingPDF(false);
+          toast.error("Failed to generate PDF. Container not found.");
+          return;
+        }
 
-      const opt = {
-        margin:       [10, 10, 15, 10],
-        filename:     `Patient_Report_${patient?.full_name?.replace(/\s+/g, '_') || 'Report'}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+        const opt = {
+          margin:       [10, 10, 15, 10],
+          filename:     `Patient_Report_${patient?.full_name?.replace(/\s+/g, '_') || 'Report'}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, logging: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
 
-      html2pdf().set(opt).from(element).save().then(() => {
-        setIsGeneratingPDF(false);
+        await html2pdf().set(opt).from(element).save();
         toast.success("Medical Report Downloaded successfully!");
-      }).catch((err: any) => {
-        setIsGeneratingPDF(false);
+      } catch (error) {
+        console.error("PDF Generation Error:", error);
         toast.error("An error occurred while generating the PDF.");
-        console.error(err);
-      });
-    }, 500);
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 800);
   };
 
   const painSeries = [...sessions]
@@ -319,7 +320,7 @@ function PatientDetail() {
       
       {/* ----------------- قالب تصدير التقرير الطبي الشامل (PDF Export Container) ----------------- */}
       {isGeneratingPDF && (
-        <div className="absolute left-[-9999px] top-[-9999px] overflow-visible">
+        <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
           <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
             
             {/* Header */}
