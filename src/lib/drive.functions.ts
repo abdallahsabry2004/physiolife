@@ -3,23 +3,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { OAuth2Client } from "google-auth-library";
 
 // 1. إعداد مصادقة جوجل باستخدام Refresh Token
-async function getGoogleAuth(storageAccountId?: string | null, supabaseClient?: any) {
+async function getGoogleAuth() {
   const { OAuth2Client } = await import("google-auth-library");
   const clientId = process.env["GOOGLE_CLIENT_ID"];
   const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
-  let refreshToken = process.env["GOOGLE_REFRESH_TOKEN"];
-
-  if (storageAccountId && supabaseClient) {
-    const { data: account } = await supabaseClient
-      .from("storage_accounts")
-      .select("root_folder_id")
-      .eq("id", storageAccountId)
-      .single();
-      
-    if (account?.root_folder_id?.startsWith("token:")) {
-      refreshToken = account.root_folder_id.split("token:")[1];
-    }
-  }
+  const refreshToken = process.env["GOOGLE_REFRESH_TOKEN"];
 
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error("Google OAuth credentials are missing.");
@@ -81,52 +69,18 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
 
     if (patientError || !patient) throw new Error("Patient not found.");
 
-    const { data: accounts } = await supabase
+    const { data: account } = await supabase
       .from("storage_accounts")
-      .select("id, root_folder_id, is_primary")
+      .select("id, root_folder_id")
       .eq("is_active", true)
       .order("is_primary", { ascending: false })
-      .order("created_at", { ascending: true });
+      .limit(1)
+      .maybeSingle();
 
-    let selectedAccount = null;
-    let auth = null;
-    let rootId = null;
-
-    if (accounts && accounts.length > 0) {
-      for (const acc of accounts) {
-        try {
-          const tempAuth = await getGoogleAuth(acc.id, supabase);
-          const { token } = await tempAuth.getAccessToken();
-          const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const limit = Number(data.storageQuota?.limit || 0);
-            const usage = Number(data.storageQuota?.usage || 0);
-            
-            // Allow if it has at least 50MB free
-            if (limit === 0 || limit - usage > 50 * 1024 * 1024) {
-              selectedAccount = acc;
-              auth = tempAuth;
-              if (acc.root_folder_id && !acc.root_folder_id.startsWith("token:")) {
-                 rootId = acc.root_folder_id;
-              }
-              break;
-            }
-          }
-        } catch (e) {
-          console.error("Storage account error:", e);
-        }
-      }
-    }
-
-    if (!auth) {
-       // fallback
-       auth = await getGoogleAuth();
-    }
-
+    const auth = await getGoogleAuth();
     const { token } = await auth.getAccessToken();
+
+    const rootId = account?.root_folder_id;
     const patientFolderId = await ensureFolder(
       auth,
       `${patient.code} - ${patient.full_name}`,
@@ -222,7 +176,7 @@ export const saveFileRecord = createServerFn({ method: "POST" })
     // Make the file publicly readable (anyone with the link)
     if (data.driveFileId) {
       try {
-        const auth = await getGoogleAuth(data.storageAccountId, supabase);
+        const auth = await getGoogleAuth();
         const { token } = await auth.getAccessToken();
         await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}/permissions`, {
           method: "POST",
@@ -263,7 +217,7 @@ export const deletePatientFile = createServerFn({ method: "POST" })
     const { supabase } = context;
     const { data: row, error } = await supabase
       .from("patient_files")
-      .select("id, drive_file_id, storage_account_id")
+      .select("id, drive_file_id")
       .eq("id", data.fileId)
       .single();
 
@@ -271,7 +225,7 @@ export const deletePatientFile = createServerFn({ method: "POST" })
 
     if (row.drive_file_id) {
       try {
-        const auth = await getGoogleAuth(row.storage_account_id, supabase);
+        const auth = await getGoogleAuth();
         const { token } = await auth.getAccessToken();
         await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
           method: "DELETE",
@@ -289,93 +243,23 @@ export const deletePatientFile = createServerFn({ method: "POST" })
 // 6. مساحة التخزين
 export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabase } = context;
-    const { data: accounts } = await supabase.from("storage_accounts").select("id, root_folder_id").eq("is_active", true);
-    let totalLimit = 0;
-    let totalUsage = 0;
-    
-    // Primary account (.env)
+  .handler(async () => {
     try {
       const auth = await getGoogleAuth();
       const { token } = await auth.getAccessToken();
-      const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", { headers: { Authorization: `Bearer ${token}` }});
-      if (res.ok) {
-         const data = await res.json();
-         totalLimit += Number(data.storageQuota?.limit || 0);
-         totalUsage += Number(data.storageQuota?.usage || 0);
-      }
-    } catch(e) {}
-    
-    // Linked accounts
-    if (accounts) {
-      for (const acc of accounts) {
-         if (acc.root_folder_id?.startsWith("token:")) {
-           try {
-              const auth = await getGoogleAuth(acc.id, supabase);
-              const { token } = await auth.getAccessToken();
-              const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", { headers: { Authorization: `Bearer ${token}` }});
-              if (res.ok) {
-                 const data = await res.json();
-                 totalLimit += Number(data.storageQuota?.limit || 0);
-                 totalUsage += Number(data.storageQuota?.usage || 0);
-              }
-           } catch(e) {}
-         }
-      }
+
+      const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) return { limit: 0, usage: 0 };
+
+      const data = await res.json();
+      return {
+        limit: Number(data.storageQuota?.limit || 0),
+        usage: Number(data.storageQuota?.usage || 0),
+      };
+    } catch (error) {
+      return { limit: 0, usage: 0 };
     }
-    
-    return { limit: totalLimit, usage: totalUsage };
-  });
-
-// 7. جلب Client ID الخاص بجوجل (عشان نستخدمه في الواجهة)
-export const getGoogleOAuthClientId = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    return process.env["GOOGLE_CLIENT_ID"] ?? "";
-  });
-
-// 8. ربط حساب درايف جديد
-export const linkDriveAccount = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((data: { code: string }) => data)
-  .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { OAuth2Client } = await import("google-auth-library");
-    const clientId = process.env["GOOGLE_CLIENT_ID"];
-    const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
-
-    if (!clientId || !clientSecret) {
-      throw new Error("Google OAuth credentials missing on server.");
-    }
-
-    // "postmessage" is the magic word required for popup-based flow
-    const auth = new OAuth2Client(clientId, clientSecret, "postmessage");
-    const { tokens } = await auth.getToken(data.code);
-
-    if (!tokens.refresh_token) {
-      throw new Error("No refresh token received. Please revoke access in your Google account and try again.");
-    }
-
-    auth.setCredentials(tokens);
-    const driveRes = await fetch("https://www.googleapis.com/drive/v3/about?fields=user", {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-    
-    let email = "linked-account@gmail.com";
-    if (driveRes.ok) {
-       const driveData = await driveRes.json();
-       email = driveData.user?.emailAddress || email;
-    }
-
-    // يخزن التوكن بأمان داخل الحقل الخاص بالرووت فولدر
-    const { error } = await supabase.from("storage_accounts").insert({
-      email,
-      root_folder_id: `token:${tokens.refresh_token}`,
-      label: "Linked Google Drive",
-    });
-
-    if (error) throw new Error(error.message);
-
-    return { ok: true, email };
   });
