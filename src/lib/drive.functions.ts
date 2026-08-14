@@ -1,13 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-// استخدام OAuth2Client بدلاً من JWT
-import { OAuth2Client } from "google-auth-library";
+import type { OAuth2Client } from "google-auth-library";
 
 // 1. إعداد مصادقة جوجل باستخدام Refresh Token
-function getGoogleAuth() {
-  const clientId = process.env['GOOGLE_CLIENT_ID'];
-  const clientSecret = process.env['GOOGLE_CLIENT_SECRET'];
-  const refreshToken = process.env['GOOGLE_REFRESH_TOKEN'];
+async function getGoogleAuth() {
+  const { OAuth2Client } = await import("google-auth-library");
+  const clientId = process.env["GOOGLE_CLIENT_ID"];
+  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
+  const refreshToken = process.env["GOOGLE_REFRESH_TOKEN"];
 
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error("Google OAuth credentials are missing.");
@@ -29,7 +29,7 @@ async function ensureFolder(auth: OAuth2Client, name: string, parentId?: string)
   const searchRes = await fetch(`${driveApiUrl}?q=${encodeURIComponent(q)}&fields=files(id)`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  
+
   const searchData = await searchRes.json();
   if (searchData.files && searchData.files.length > 0) {
     return searchData.files[0].id;
@@ -47,7 +47,7 @@ async function ensureFolder(auth: OAuth2Client, name: string, parentId?: string)
       parents: parentId ? [parentId] : undefined,
     }),
   });
-  
+
   const createData = await createRes.json();
   return createData.id;
 }
@@ -55,7 +55,9 @@ async function ensureFolder(auth: OAuth2Client, name: string, parentId?: string)
 // 2. طلب رابط الرفع من جوجل
 export const initiateDriveUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string }) => data)
+  .validator(
+    (data: { patientId: string; category: string; fileName: string; mimeType: string }) => data,
+  )
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
@@ -64,7 +66,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
       .select("id, code, full_name")
       .eq("id", data.patientId)
       .single();
-      
+
     if (patientError || !patient) throw new Error("Patient not found.");
 
     const { data: account } = await supabase
@@ -75,11 +77,15 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const auth = getGoogleAuth();
+    const auth = await getGoogleAuth();
     const { token } = await auth.getAccessToken();
 
-    const rootId = account?.root_folder_id; 
-    const patientFolderId = await ensureFolder(auth, `${patient.code} - ${patient.full_name}`, rootId ?? undefined);
+    const rootId = account?.root_folder_id;
+    const patientFolderId = await ensureFolder(
+      auth,
+      `${patient.code} - ${patient.full_name}`,
+      rootId ?? undefined,
+    );
     const categoryFolderId = await ensureFolder(auth, data.category, patientFolderId);
 
     const initRes = await fetch(
@@ -95,7 +101,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
           name: data.fileName,
           parents: [categoryFolderId],
         }),
-      }
+      },
     );
 
     if (!initRes.ok) {
@@ -116,10 +122,18 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
 // 3. رفع الأجزاء (Chunks) للسيرفر
 export const uploadDriveChunk = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { uploadUrl: string; chunkBase64: string; start: number; end: number; totalSize: number }) => data)
+  .validator(
+    (data: {
+      uploadUrl: string;
+      chunkBase64: string;
+      start: number;
+      end: number;
+      totalSize: number;
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const buffer = Buffer.from(data.chunkBase64, "base64");
-    
+
     const res = await fetch(data.uploadUrl, {
       method: "PUT",
       headers: {
@@ -131,7 +145,7 @@ export const uploadDriveChunk = createServerFn({ method: "POST" })
     if (res.status === 308) {
       return { status: 308, data: null }; // الاستمرار في الرفع
     }
-    
+
     if (res.status === 200 || res.status === 201) {
       const driveData = await res.json();
       return { status: res.status, data: driveData }; // اكتمال الرفع
@@ -144,9 +158,42 @@ export const uploadDriveChunk = createServerFn({ method: "POST" })
 // 4. حفظ بيانات الملف في قاعدة بيانات Supabase
 export const saveFileRecord = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { patientId: string; category: string; fileName: string; mimeType: string; size: number; driveFileId: string; webViewLink: string; storageAccountId?: string | undefined }) => data)
+  .validator(
+    (data: {
+      patientId: string;
+      category: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+      driveFileId: string;
+      webViewLink: string;
+      storageAccountId?: string | undefined;
+    }) => data,
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+
+    // Make the file publicly readable (anyone with the link)
+    if (data.driveFileId) {
+      try {
+        const auth = await getGoogleAuth();
+        const { token } = await auth.getAccessToken();
+        await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}/permissions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            role: "reader",
+            type: "anyone",
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to set public permissions on drive file:", e);
+      }
+    }
+
     const { error } = await supabase.from("patient_files").insert({
       patient_id: data.patientId,
       category: data.category,
@@ -173,12 +220,12 @@ export const deletePatientFile = createServerFn({ method: "POST" })
       .select("id, drive_file_id")
       .eq("id", data.fileId)
       .single();
-      
+
     if (error || !row) throw new Error("File not found.");
 
     if (row.drive_file_id) {
       try {
-        const auth = getGoogleAuth();
+        const auth = await getGoogleAuth();
         const { token } = await auth.getAccessToken();
         await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
           method: "DELETE",
@@ -198,7 +245,7 @@ export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     try {
-      const auth = getGoogleAuth();
+      const auth = await getGoogleAuth();
       const { token } = await auth.getAccessToken();
 
       const res = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", {
