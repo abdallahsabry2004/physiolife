@@ -252,7 +252,7 @@ export function PatientExercises({ patientId }: { patientId: string }) {
                       📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني
                     </p>
                     <p dir="ltr" className="mt-1">
-                      📞 01050359331
+                      📞 للتواصل والحجز: 01050359331
                     </p>
                   </div>
                 </div>
