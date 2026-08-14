@@ -152,7 +152,7 @@ function LoginPage() {
         </div>
         <div>
           <h1 className="max-w-md text-4xl font-bold leading-tight">
-            Hospital-grade records, built for physical therapy.
+            Physio Life Center, for Physical Therapy & Rehabilitation.
           </h1>
           <p className="mt-4 max-w-md text-sm text-sidebar-foreground/70">
             Full patient journeys: assessment, examination, diagnosis, every treatment session,
