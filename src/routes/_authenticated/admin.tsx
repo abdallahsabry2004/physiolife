@@ -218,6 +218,9 @@ function AdminPage() {
                 reject(err);
               }
             },
+            error_callback: (error: any) => {
+              reject(new Error(error.type || "Google OAuth popup failed or was closed."));
+            },
           });
           client.requestCode();
         } catch (err) {
