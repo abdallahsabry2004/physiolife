@@ -47,9 +47,6 @@ function AdminPage() {
   const { isAdmin, fullName } = useAuth();
   const qc = useQueryClient();
   
-  const [driveEmail, setDriveEmail] = useState("");
-  const [driveFolderId, setDriveFolderId] = useState("");
-  
   // حالات التحكم في البحث وتقسيم الصفحات للسجلات
   const [logSearchInput, setLogSearchInput] = useState("");
   const [logSearchTerm, setLogSearchTerm] = useState("");
@@ -164,30 +161,6 @@ function AdminPage() {
     onSuccess: () => {
       toast.success("User status updated");
       void qc.invalidateQueries({ queryKey: ["staff"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const addAccount = useMutation({
-    mutationFn: async () => {
-      if (!driveEmail.trim() || !driveFolderId.trim()) {
-        throw new Error("Please provide both email and folder ID.");
-      }
-      
-      const { error } = await supabase
-        .from("storage_accounts")
-        .insert({ 
-          email: driveEmail.trim(), 
-          root_folder_id: driveFolderId.trim(),
-          label: "Additional storage" 
-        });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Storage account added successfully!");
-      setDriveEmail("");
-      setDriveFolderId("");
-      void qc.invalidateQueries({ queryKey: ["storage_accounts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -332,41 +305,6 @@ function AdminPage() {
             <p className="text-[10px] text-muted-foreground mt-1">
               This shows the actual storage limits of the Google Drive account currently authorized via the system API.
             </p>
-          </div>
-
-          <div className="space-y-4 rounded-lg border p-4 bg-card">
-            <h3 className="text-sm font-semibold">How to add additional storage?</h3>
-            <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1.5 mb-4">
-              <li>Create a new folder in the new Gmail account you want to use.</li>
-              <li>Share this folder with your primary clinic email (<code>physiolife.ptcenter@gmail.com</code>) as an <strong>Editor</strong>.</li>
-              <li>Copy the <strong>Folder ID</strong> from the URL (the part after <code>folders/</code>).</li>
-              <li>Paste the email and the Folder ID below to link it.</li>
-            </ol>
-            
-            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
-              <div className="space-y-1.5">
-                <Label>Gmail Address</Label>
-                <Input
-                  placeholder="extra.storage@gmail.com"
-                  value={driveEmail}
-                  onChange={(e) => setDriveEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Folder ID</Label>
-                <Input
-                  placeholder="1A2b3C4d5E6f7G8h9I0j..."
-                  value={driveFolderId}
-                  onChange={(e) => setDriveFolderId(e.target.value)}
-                />
-              </div>
-              <Button 
-                onClick={() => addAccount.mutate()} 
-                disabled={!driveEmail || !driveFolderId || addAccount.isPending}
-              >
-                {addAccount.isPending ? "Adding..." : <><Plus className="mr-2 h-4 w-4" /> Add account</>}
-              </Button>
-            </div>
           </div>
 
           <div className="space-y-2">
