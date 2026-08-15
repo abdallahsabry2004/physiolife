@@ -22,6 +22,7 @@ import {
   initiateGenericDriveUpload,
   uploadDriveChunk,
   makeDriveFilePublic,
+  deleteDriveFile,
 } from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,11 +111,13 @@ function QuestionnairesPage() {
     oIds: [],
   });
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<InterpretationBand[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const initUploadFn = useServerFn(initiateGenericDriveUpload);
   const uploadChunkFn = useServerFn(uploadDriveChunk);
   const makePublicFn = useServerFn(makeDriveFilePublic);
+  const deleteDriveFn = useServerFn(deleteDriveFile);
 
   const { data: list = [] } = useQuery({
     queryKey: ["questionnaires"],
@@ -149,7 +152,8 @@ function QuestionnairesPage() {
     setQuestions([emptyQuestion()]);
     setBands([{ min: 0, max: 20, label: "" }]);
     setEditingId(null);
-    setImageFile(null);
+    setImageFiles([]);
+    setExistingImages([]);
     setIsUploading(false);
   };
 
@@ -178,13 +182,17 @@ function QuestionnairesPage() {
       mcid: data.mcid === null ? "" : String(data.mcid),
       mdc: data.mdc === null ? "" : String(data.mdc),
     });
-    setBands(
-      data.scoring_method === "image"
-        ? (data.interpretation as unknown as InterpretationBand[]) || []
-        : parseBands(data.interpretation).length
+    if (data.scoring_method === "image") {
+      setExistingImages((data.interpretation as unknown as InterpretationBand[]) || []);
+      setBands([]);
+    } else {
+      setExistingImages([]);
+      setBands(
+        parseBands(data.interpretation).length
           ? parseBands(data.interpretation)
           : [],
-    );
+      );
+    }
     const qs = [...(data.questionnaire_questions ?? [])].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
@@ -257,25 +265,17 @@ function QuestionnairesPage() {
   const save = useMutation({
     mutationFn: async (deleteIds?: { qIds: string[]; oIds: string[] }) => {
       let webViewLink = meta.scoring_method === "image" ? meta.scoring_formula : null;
-      const driveFileId = meta.description; // We might use description or a new field. Let's use interpretation for JSON!
-
       let interpretationJson = bands.filter((b) => b.label.trim() !== "");
 
-      if (meta.scoring_method === "image" && imageFile) {
+      if (meta.scoring_method === "image") {
         setIsUploading(true);
-        const res = await uploadQuestionnaireImage(imageFile);
-        webViewLink = res.webViewLink;
-
-        // We will store driveFileId and webViewLink in the JSON interpretation just in case.
-        // Wait, interpretation is currently bands array.
-        // We can just store it in description, or store it in scoring_formula.
-        // Let's store webViewLink in scoring_formula, and driveFileId as a text in description or something. Or we just don't need driveFileId if we don't plan to delete it easily, but it's good to have. We'll store it as `{ type: 'image', webViewLink: ..., driveFileId: ... }` in interpretation instead of bands.
-        interpretationJson = [
-          { type: "image", webViewLink, driveFileId: res.driveFileId },
-        ] as unknown as InterpretationBand[];
-      } else if (meta.scoring_method === "image" && !imageFile && editingId) {
-        // Keep existing interpretation if not changed
-        interpretationJson = bands as unknown as InterpretationBand[];
+        const uploadedImages: any[] = [];
+        for (const file of imageFiles) {
+          const res = await uploadQuestionnaireImage(file);
+          uploadedImages.push({ type: "image", webViewLink: res.webViewLink, driveFileId: res.driveFileId });
+        }
+        interpretationJson = [...existingImages, ...uploadedImages] as unknown as InterpretationBand[];
+        webViewLink = (interpretationJson as any[])?.[0]?.webViewLink || null;
       }
 
       const cleanQuestions = meta.scoring_method === "image" ? [] : getCleanQuestions(questions);
@@ -480,6 +480,18 @@ function QuestionnairesPage() {
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const target = list.find((q) => q.id === id);
+      if (target?.scoring_method === "image" && target.interpretation) {
+        const files = target.interpretation as any[];
+        for (const file of files) {
+          if (file?.driveFileId) {
+            try {
+              await deleteDriveFn({ data: { driveFileId: file.driveFileId } });
+            } catch (e) {
+              console.error("Failed to delete drive file", e);
+            }
+          }
+        }
+      }
       const { error } = await supabase.from("questionnaires").delete().eq("id", id);
       if (error) throw error;
       logActivityAsync({
@@ -734,47 +746,59 @@ function QuestionnairesPage() {
             )}
 
             {meta.scoring_method === "image" && (
-              <div className="space-y-2">
-                <Label>Questionnaire Image File</Label>
-                <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center gap-2">
-                  <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
-                  {imageFile ? (
-                    <div className="flex flex-col items-center gap-1">
-                      <p className="text-sm font-medium">{imageFile.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(imageFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setImageFile(null)}
-                        className="mt-2 text-destructive"
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-sm font-medium">Click to select an image</p>
-                      <p className="text-xs text-muted-foreground">PNG, JPG, PDF up to 10MB</p>
-                      <Input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            setImageFile(e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </>
-                  )}
-                </div>
-                {editingId && !imageFile && (
-                  <p className="text-xs text-muted-foreground">
-                    A file is already uploaded. Selecting a new file will overwrite it.
-                  </p>
+              <div className="space-y-4">
+                <Label>Questionnaire Files (Images / PDFs)</Label>
+
+                {(existingImages.length > 0 || imageFiles.length > 0) && (
+                  <div className="space-y-2">
+                    {existingImages.map((img: any, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 border rounded-md">
+                        <a href={img.webViewLink} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">
+                          View File {idx + 1}
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive h-8 w-8 p-0"
+                          onClick={() => setExistingImages(existingImages.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {imageFiles.map((f, idx) => (
+                      <div key={`new-${idx}`} className="flex items-center justify-between p-2 border rounded-md">
+                        <span className="text-sm">{f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive h-8 w-8 p-0"
+                          onClick={() => setImageFiles(imageFiles.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 )}
+
+                <div className="relative border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center gap-2 hover:bg-secondary/20 transition-colors">
+                  <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm font-medium">Click to select files</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, PDF up to 10MB</p>
+                  <Input
+                    type="file"
+                    multiple
+                    accept="image/*,application/pdf"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    onChange={(e) => {
+                      if (e.target.files?.length) {
+                        setImageFiles((prev) => [...prev, ...Array.from(e.target.files as FileList)]);
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
               </div>
             )}
 
