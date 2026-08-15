@@ -1,4 +1,4 @@
-export type ScoringMethod = "sum" | "percentage" | "average" | "custom";
+export type ScoringMethod = "sum" | "percentage" | "average" | "custom" | "image";
 
 export type InterpretationBand = { min: number; max: number; label: string };
 
@@ -24,7 +24,7 @@ function evalFormula(formula: string, vars: Record<string, number>): number {
     expr = expr.replaceAll(`{${k}}`, String(v));
   }
   if (!/^[0-9+\-*/().\s]*$/.test(expr)) throw new Error("Invalid scoring formula");
-  // eslint-disable-next-line no-new-func
+
   const result = Number(new Function(`return (${expr || 0});`)());
   return Number.isFinite(result) ? result : 0;
 }
@@ -70,5 +70,14 @@ export const SCORING_METHODS: { value: ScoringMethod; label: string; hint: strin
   { value: "sum", label: "Sum of answers", hint: "Total = sum of all selected answer scores" },
   { value: "percentage", label: "Percentage of maximum", hint: "Total = raw / max × 100" },
   { value: "average", label: "Average per question", hint: "Total = raw / answered questions" },
-  { value: "custom", label: "Custom formula", hint: "Use {raw}, {max}, {count} — e.g. ({raw}/{max})*100" },
+  {
+    value: "custom",
+    label: "Custom formula",
+    hint: "Use {raw}, {max}, {count} — e.g. ({raw}/{max})*100",
+  },
+  {
+    value: "image",
+    label: "Image / Uploaded File",
+    hint: "Upload a physical questionnaire image (no digital questions).",
+  },
 ];
