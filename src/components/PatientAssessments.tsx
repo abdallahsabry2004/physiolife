@@ -137,13 +137,12 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
   const live = useMemo(() => {
     if (!activeQ) return { raw: 0, max: 0, answered: 0, final: 0, interpretation: "" };
     if (activeQ.scoring_method === "image") {
-      const final = Number(imageManualScore) || 0;
       return {
-        raw: final,
+        raw: 0,
         max: activeQ.max_score !== null ? Number(activeQ.max_score) : 0,
         answered: 1, // acts as valid
-        final,
-        interpretation: "",
+        final: 0,
+        interpretation: imageManualScore,
       };
     }
     let raw = 0;
@@ -310,6 +309,7 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {meta?.scoring_method !== "image" && (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={series}>
@@ -363,6 +363,7 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              )}
 
               <div className="space-y-2">
                 {[...records].reverse().map((r) => (
@@ -372,25 +373,30 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                   >
                     <div>
                       <p className="font-medium">
-                        {r.assessed_on} · score {Number(r.final_score)}
-                        {r.max_possible ? ` / ${Number(r.max_possible)}` : ""}
+                        {r.assessed_on}
+                        {meta?.scoring_method !== "image" && ` · score ${Number(r.final_score)}`}
+                        {meta?.scoring_method !== "image" && r.max_possible ? ` / ${Number(r.max_possible)}` : ""}
                       </p>
                       {r.interpretation && (
-                        <p className="text-muted-foreground">{r.interpretation}</p>
+                        <p className={meta?.scoring_method === "image" ? "font-semibold mt-1" : "text-muted-foreground"}>
+                          {meta?.scoring_method === "image" ? `Result: ${r.interpretation}` : r.interpretation}
+                        </p>
                       )}
                       {r.notes && <p className="text-muted-foreground">{r.notes}</p>}
                     </div>
                     <div className="flex items-center gap-1 print:hidden">
                       {/* زر عرض تفاصيل التقييم */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-primary"
-                        onClick={() => setViewAssessmentId(r.id)}
-                        title="View Answers"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      {meta?.scoring_method !== "image" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-primary"
+                          onClick={() => setViewAssessmentId(r.id)}
+                          title="View Answers"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
 
                       {canEditClinical && (
                         <Button
@@ -523,10 +529,9 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                   <Printer className="mr-2 h-4 w-4" /> Print / View Image
                 </Button>
                 <div className="space-y-2 mt-4">
-                  <Label>Patient Result (Score)</Label>
+                  <Label>Patient Result</Label>
                   <Input
-                    type="number"
-                    step="any"
+                    type="text"
                     placeholder="Enter result..."
                     value={imageManualScore}
                     onChange={(e) => setImageManualScore(e.target.value)}
