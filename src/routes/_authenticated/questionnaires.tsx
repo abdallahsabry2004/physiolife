@@ -38,6 +38,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_authenticated/questionnaires")({
   head: () => ({
@@ -282,7 +288,7 @@ function QuestionnairesPage() {
         const uploadedImages: any[] = [];
         for (const file of imageFiles) {
           const res = await uploadQuestionnaireImage(file);
-          uploadedImages.push({ type: "image", webViewLink: res.webViewLink, driveFileId: res.driveFileId });
+          uploadedImages.push({ type: "image", webViewLink: res.webViewLink, driveFileId: res.driveFileId, name: file.name });
         }
         interpretationJson = [...existingImages, ...uploadedImages] as unknown as InterpretationBand[];
         webViewLink = (interpretationJson as any[])?.[0]?.webViewLink || null;
@@ -587,23 +593,38 @@ function QuestionnairesPage() {
               </div>
               <div className="flex gap-2">
                 {q.scoring_method === "image" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                  >
-                    <a
-                      href={
-                        (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
-                        q.scoring_formula ||
-                        "#"
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Printer className="mr-2 h-4 w-4" /> Print / View
-                    </a>
-                  </Button>
+                  Array.isArray(q.interpretation) && q.interpretation.length > 1 ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Printer className="mr-2 h-4 w-4" /> Print / View
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {(q.interpretation as any[]).map((file, idx) => (
+                          <DropdownMenuItem key={idx} asChild>
+                            <a href={file.webViewLink} target="_blank" rel="noreferrer" className="w-full cursor-pointer">
+                              {file.name || `File ${idx + 1}`}
+                            </a>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <Button variant="outline" size="sm" asChild>
+                      <a
+                        href={
+                          (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
+                          q.scoring_formula ||
+                          "#"
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Printer className="mr-2 h-4 w-4" /> Print / View
+                      </a>
+                    </Button>
+                  )
                 ) : (
                   <Button variant="outline" size="sm" onClick={() => setViewId(q.id)}>
                     <ClipboardList className="mr-2 h-4 w-4" /> View
