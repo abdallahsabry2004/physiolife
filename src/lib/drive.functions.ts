@@ -313,7 +313,7 @@ export const deletePatientFile = createServerFn({ method: "POST" })
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-           console.error("Delete failed:", await res.text());
+          console.error("Delete failed:", await res.text());
         }
       } catch (e) {
         console.error("Drive delete failed", e);
@@ -344,6 +344,49 @@ export const deleteDriveFile = createServerFn({ method: "POST" })
       console.error("Drive delete failed", e);
       throw new Error("Failed to delete from Drive");
     }
+  });
+
+export const deleteAllPatientDriveFiles = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { patientId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: rows, error } = await supabase
+      .from("patient_files")
+      .select("id, drive_file_id")
+      .eq("patient_id", data.patientId);
+
+    if (error) throw new Error("Could not fetch patient files");
+
+    if (rows && rows.length > 0) {
+      try {
+        const auth = await getGoogleAuth();
+        const { token } = await auth.getAccessToken();
+
+        for (const row of rows) {
+          if (row.drive_file_id) {
+            try {
+              const res = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`,
+                {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
+              if (!res.ok) {
+                console.error(`Delete failed for file ${row.drive_file_id}:`, await res.text());
+              }
+            } catch (err) {
+              console.error(`Failed to delete file ${row.drive_file_id} from Drive:`, err);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to authenticate with Google Drive for batch delete", e);
+      }
+    }
+
+    return { ok: true };
   });
 
 // 6. مساحة التخزين
