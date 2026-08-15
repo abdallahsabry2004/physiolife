@@ -5,7 +5,7 @@ import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; 
+import { logActivityAsync } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,9 +56,9 @@ const emptyForm = {
 };
 
 function PatientsPage() {
-  const { user, fullName } = useAuth(); 
+  const { user, fullName, isTrainee } = useAuth();
   const qc = useQueryClient();
-  
+
   // حالات التحكم في البحث والفلترة وتقسيم الصفحات
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -66,8 +66,8 @@ function PatientsPage() {
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
   // تم إعادة الافتراضي إلى 10
-  const [pageSize, setPageSize] = useState(10); 
-  
+  const [pageSize, setPageSize] = useState(10);
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
@@ -84,29 +84,38 @@ function PatientsPage() {
 
   // استعلام ذكي يجلب البيانات من قاعدة البيانات بناءً على الفلاتر والبحث
   const { data, isLoading } = useQuery({
-    queryKey: ["patients", page, pageSize, searchTerm, status, gender],
+    queryKey: ["patients", page, pageSize, searchTerm, status, gender, isTrainee],
     queryFn: async () => {
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
       let query = supabase
         .from("patients")
-        .select("id, code, full_name, gender, age, phone, status, diagnosis, created_at", { count: "exact" })
+        .select("id, code, full_name, gender, age, phone, status, diagnosis, created_at", {
+          count: "exact",
+        })
         .is("deleted_at", null);
 
       if (searchTerm) {
-        query = query.or(`full_name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
+        query = query.or(
+          `full_name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`,
+        );
       }
-      if (status !== "all") {
+      if (isTrainee) {
+        // المتدرب يرى المرضى النشطين Active فقط
+        query = query.eq("status", "active");
+      } else if (status !== "all") {
         query = query.eq("status", status);
       }
       if (gender !== "all") {
         query = query.eq("gender", gender);
       }
 
-      const { data: rows, count, error } = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
+      const {
+        data: rows,
+        count,
+        error,
+      } = await query.order("created_at", { ascending: false }).range(from, to);
 
       if (error) throw error;
       return { items: rows, total: count ?? 0 };
@@ -140,7 +149,7 @@ function PatientsPage() {
         user_name: fullName,
         action: "ADD_NEW_PATIENT",
         entity: `Patient: ${form.full_name}`,
-        details: { ...form }
+        details: { ...form },
       });
 
       return data;
@@ -163,107 +172,109 @@ function PatientsPage() {
             {data?.total ?? 0} permanent records · instant search by name, phone or ID
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" /> Register patient
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Register a new patient</DialogTitle>
-            </DialogHeader>
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                create.mutate();
-              }}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full name</Label>
-                <Input
-                  id="full_name"
-                  value={form.full_name}
-                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Gender</Label>
-                  <Select
-                    value={form.gender}
-                    onValueChange={(v) => setForm({ ...form, gender: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="age">Age</Label>
-                  <Input
-                    id="age"
-                    type="number"
-                    value={form.age}
-                    onChange={(e) => setForm({ ...form, age: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="occupation">Occupation</Label>
-                  <Input
-                    id="occupation"
-                    value={form.occupation}
-                    onChange={(e) => setForm({ ...form, occupation: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="diagnosis">Working diagnosis</Label>
-                {/* استخدام مكوّن الإكمال التلقائي الطبي بدلاً من Input[cite: 1] */}
-                <MedicalAutocomplete
-                  value={form.diagnosis}
-                  onChange={(val) => setForm({ ...form, diagnosis: val })}
-                  placeholder="e.g. Low back pain"
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="referral">Referral source</Label>
-                  <Input
-                    id="referral"
-                    value={form.referral_source}
-                    onChange={(e) => setForm({ ...form, referral_source: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  />
-                </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={create.isPending}>
-                Save patient
+        {!isTrainee && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="mr-2 h-4 w-4" /> Register patient
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Register a new patient</DialogTitle>
+              </DialogHeader>
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  create.mutate();
+                }}
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Full name</Label>
+                  <Input
+                    id="full_name"
+                    value={form.full_name}
+                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select
+                      value={form.gender}
+                      onValueChange={(v) => setForm({ ...form, gender: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="age">Age</Label>
+                    <Input
+                      id="age"
+                      type="number"
+                      value={form.age}
+                      onChange={(e) => setForm({ ...form, age: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="occupation">Occupation</Label>
+                    <Input
+                      id="occupation"
+                      value={form.occupation}
+                      onChange={(e) => setForm({ ...form, occupation: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="diagnosis">Working diagnosis</Label>
+                  {/* استخدام مكوّن الإكمال التلقائي الطبي بدلاً من Input[cite: 1] */}
+                  <MedicalAutocomplete
+                    value={form.diagnosis}
+                    onChange={(val) => setForm({ ...form, diagnosis: val })}
+                    placeholder="e.g. Low back pain"
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="referral">Referral source</Label>
+                    <Input
+                      id="referral"
+                      value={form.referral_source}
+                      onChange={(e) => setForm({ ...form, referral_source: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <Button type="submit" className="w-full" disabled={create.isPending}>
+                  Save patient
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </header>
 
       <Card>
@@ -277,23 +288,38 @@ function PatientsPage() {
               onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
-          <Select 
-            value={status} 
-            onValueChange={(val) => { setStatus(val); setPage(1); }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="discharged">Discharged</SelectItem>
-              <SelectItem value="on_hold">On hold</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select 
-            value={gender} 
-            onValueChange={(val) => { setGender(val); setPage(1); }}
+          {!isTrainee ? (
+            <Select
+              value={status}
+              onValueChange={(val) => {
+                setStatus(val);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="discharged">Discharged</SelectItem>
+                <SelectItem value="on_hold">On hold</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge
+              variant="outline"
+              className="h-10 px-3 flex items-center gap-1.5 text-xs text-muted-foreground font-medium"
+            >
+              Active only
+            </Badge>
+          )}
+          <Select
+            value={gender}
+            onValueChange={(val) => {
+              setGender(val);
+              setPage(1);
+            }}
           >
             <SelectTrigger className="w-36">
               <SelectValue />
@@ -337,11 +363,16 @@ function PatientsPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Rows per page:</span>
-            <Select 
-              value={String(pageSize)} 
-              onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => {
+                setPageSize(Number(v));
+                setPage(1);
+              }}
             >
-              <SelectTrigger className="w-[80px] h-8"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[80px] h-8">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="10">10</SelectItem>
                 <SelectItem value="20">20</SelectItem>
@@ -356,16 +387,18 @@ function PatientsPage() {
               Page {page} of {totalPages}
             </span>
             <div className="flex gap-2">
-              <Button 
-                variant="outline" size="sm" 
-                onClick={() => setPage(p => Math.max(1, p - 1))} 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Prev
               </Button>
-              <Button 
-                variant="outline" size="sm" 
-                onClick={() => setPage(p => p + 1)} 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => p + 1)}
                 disabled={page >= totalPages}
               >
                 Next <ChevronRight className="h-4 w-4 ml-1" />
