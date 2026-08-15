@@ -227,8 +227,14 @@ function QuestionnairesPage() {
     while (start < totalSize) {
       const end = Math.min(start + chunkSize, totalSize);
       const chunk = file.slice(start, end);
-      const chunkBuffer = await chunk.arrayBuffer();
-      const base64Chunk = Buffer.from(chunkBuffer).toString("base64");
+      const base64Chunk = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.readAsDataURL(chunk);
+      });
 
       const uploadRes = await uploadChunkFn({
         data: { uploadUrl, chunkBase64: base64Chunk, start, end: end - 1, totalSize },
