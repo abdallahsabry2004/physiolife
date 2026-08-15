@@ -1,16 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, X, ClipboardList, AlertTriangle } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  ClipboardList,
+  AlertTriangle,
+  UploadCloud,
+  Image as ImageIcon,
+  Printer,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { logActivityAsync } from "@/lib/logger";
+import { SCORING_METHODS, parseBands, type InterpretationBand } from "@/lib/questionnaires";
+import { useServerFn } from "@tanstack/react-start";
 import {
-  SCORING_METHODS,
-  parseBands,
-  type InterpretationBand,
-} from "@/lib/questionnaires";
+  initiateGenericDriveUpload,
+  uploadDriveChunk,
+  makeDriveFilePublic,
+} from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,7 +93,7 @@ const getCleanQuestions = (qs: QuestionDraft[]) =>
 function QuestionnairesPage() {
   const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
-  
+
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [meta, setMeta] = useState(emptyMeta);
@@ -93,7 +105,16 @@ function QuestionnairesPage() {
   // حالات التحكم في عملية الفحص والتحذير والحذف
   const [isChecking, setIsChecking] = useState(false);
   const [warningOpen, setWarningOpen] = useState(false);
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<{qIds: string[]; oIds: string[]}>({qIds: [], oIds: []});
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<{ qIds: string[]; oIds: string[] }>({
+    qIds: [],
+    oIds: [],
+  });
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const initUploadFn = useServerFn(initiateGenericDriveUpload);
+  const uploadChunkFn = useServerFn(uploadDriveChunk);
+  const makePublicFn = useServerFn(makeDriveFilePublic);
 
   const { data: list = [] } = useQuery({
     queryKey: ["questionnaires"],
@@ -128,6 +149,8 @@ function QuestionnairesPage() {
     setQuestions([emptyQuestion()]);
     setBands([{ min: 0, max: 20, label: "" }]);
     setEditingId(null);
+    setImageFile(null);
+    setIsUploading(false);
   };
 
   const startEdit = async (id: string) => {
@@ -155,7 +178,13 @@ function QuestionnairesPage() {
       mcid: data.mcid === null ? "" : String(data.mcid),
       mdc: data.mdc === null ? "" : String(data.mdc),
     });
-    setBands(parseBands(data.interpretation).length ? parseBands(data.interpretation) : []);
+    setBands(
+      data.scoring_method === "image"
+        ? (data.interpretation as unknown as InterpretationBand[]) || []
+        : parseBands(data.interpretation).length
+          ? parseBands(data.interpretation)
+          : [],
+    );
     const qs = [...(data.questionnaire_questions ?? [])].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
@@ -179,9 +208,71 @@ function QuestionnairesPage() {
     setOpen(true);
   };
 
+  const uploadQuestionnaireImage = async (file: File) => {
+    // 1. Initialize upload
+    const { uploadUrl } = await initUploadFn({
+      data: {
+        folderName: "Questionnaires",
+        fileName: `${meta.name || "Questionnaire"} - ${file.name}`,
+        mimeType: file.type,
+      },
+    });
+
+    // 2. Chunk Upload
+    const chunkSize = 256 * 1024; // 256KB
+    const totalSize = file.size;
+    let start = 0;
+    let driveFileId = "";
+
+    while (start < totalSize) {
+      const end = Math.min(start + chunkSize, totalSize);
+      const chunk = file.slice(start, end);
+      const chunkBuffer = await chunk.arrayBuffer();
+      const base64Chunk = Buffer.from(chunkBuffer).toString("base64");
+
+      const uploadRes = await uploadChunkFn({
+        data: { uploadUrl, chunkBase64: base64Chunk, start, end: end - 1, totalSize },
+      });
+
+      if (uploadRes.status === 200 || uploadRes.status === 201) {
+        driveFileId = uploadRes.data.id;
+        break;
+      }
+      start = end;
+    }
+
+    if (!driveFileId) throw new Error("File upload failed to complete.");
+
+    // 3. Make public
+    const { webViewLink } = await makePublicFn({ data: { driveFileId } });
+    return { driveFileId, webViewLink };
+  };
+
   const save = useMutation({
     mutationFn: async (deleteIds?: { qIds: string[]; oIds: string[] }) => {
-      const cleanQuestions = getCleanQuestions(questions);
+      let webViewLink = meta.scoring_method === "image" ? meta.scoring_formula : null;
+      const driveFileId = meta.description; // We might use description or a new field. Let's use interpretation for JSON!
+
+      let interpretationJson = bands.filter((b) => b.label.trim() !== "");
+
+      if (meta.scoring_method === "image" && imageFile) {
+        setIsUploading(true);
+        const res = await uploadQuestionnaireImage(imageFile);
+        webViewLink = res.webViewLink;
+
+        // We will store driveFileId and webViewLink in the JSON interpretation just in case.
+        // Wait, interpretation is currently bands array.
+        // We can just store it in description, or store it in scoring_formula.
+        // Let's store webViewLink in scoring_formula, and driveFileId as a text in description or something. Or we just don't need driveFileId if we don't plan to delete it easily, but it's good to have. We'll store it as `{ type: 'image', webViewLink: ..., driveFileId: ... }` in interpretation instead of bands.
+        interpretationJson = [
+          { type: "image", webViewLink, driveFileId: res.driveFileId },
+        ] as unknown as InterpretationBand[];
+      } else if (meta.scoring_method === "image" && !imageFile && editingId) {
+        // Keep existing interpretation if not changed
+        interpretationJson = bands as unknown as InterpretationBand[];
+      }
+
+      const cleanQuestions = meta.scoring_method === "image" ? [] : getCleanQuestions(questions);
 
       const payload = {
         name: meta.name.trim(),
@@ -189,21 +280,26 @@ function QuestionnairesPage() {
         category: meta.category.trim() || null,
         description: meta.description.trim() || null,
         scoring_method: meta.scoring_method,
-        scoring_formula: meta.scoring_method === "custom" ? meta.scoring_formula.trim() : null,
+        scoring_formula:
+          meta.scoring_method === "custom"
+            ? meta.scoring_formula.trim()
+            : meta.scoring_method === "image"
+              ? webViewLink
+              : null,
         min_score: num(meta.min_score) ?? 0,
         max_score: num(meta.max_score),
         mcid: num(meta.mcid),
         mdc: num(meta.mdc),
-        interpretation: bands.filter((b) => b.label.trim() !== ""),
+        interpretation:
+          meta.scoring_method === "image"
+            ? interpretationJson
+            : bands.filter((b) => b.label.trim() !== ""),
       };
 
       let questionnaireId = editingId;
-      
+
       if (editingId) {
-        const { error } = await supabase
-          .from("questionnaires")
-          .update(payload)
-          .eq("id", editingId);
+        const { error } = await supabase.from("questionnaires").update(payload).eq("id", editingId);
         if (error) throw error;
 
         // استخدام الـ IDs الجاهزة من الدالة الفاحصة لتنفيذ الحذف الآمن
@@ -311,11 +407,10 @@ function QuestionnairesPage() {
     }
 
     const cleanQuestions = getCleanQuestions(questions);
-    if (cleanQuestions.length === 0) {
+    if (meta.scoring_method !== "image" && cleanQuestions.length === 0) {
       toast.error("Add at least one question with answer options");
       return;
     }
-
 
     if (!editingId) {
       save.mutate(undefined);
@@ -328,20 +423,22 @@ function QuestionnairesPage() {
         .from("questionnaire_questions")
         .select("id, questionnaire_options(id)")
         .eq("questionnaire_id", editingId);
-      
+
       if (error) throw error;
 
       const currentQuestionIds = cleanQuestions.map((q) => q.id).filter(Boolean) as string[];
-      const currentOptionIds = cleanQuestions.flatMap((q) => q.options.map((o) => o.id)).filter(Boolean) as string[];
-      
+      const currentOptionIds = cleanQuestions
+        .flatMap((q) => q.options.map((o) => o.id))
+        .filter(Boolean) as string[];
+
       const dbQIds = (existingQs ?? []).map((q) => q.id);
       const dbOIds = (existingQs ?? []).flatMap((q) => q.questionnaire_options.map((o) => o.id));
-      
+
       const qIds = dbQIds.filter((id) => !currentQuestionIds.includes(id));
       const oIds = dbOIds.filter((id) => !currentOptionIds.includes(id));
 
       let hasUsage = false;
-      
+
       if (qIds.length) {
         const { count, error: cErr } = await supabase
           .from("patient_assessment_answers")
@@ -350,7 +447,7 @@ function QuestionnairesPage() {
         if (cErr) throw cErr;
         if (count && count > 0) hasUsage = true;
       }
-      
+
       if (!hasUsage && oIds.length) {
         const { count, error: cErr } = await supabase
           .from("patient_assessment_answers")
@@ -368,8 +465,8 @@ function QuestionnairesPage() {
       }
 
       save.mutate({ qIds, oIds });
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error((err as Error).message);
     }
     setIsChecking(false);
   };
@@ -445,15 +542,38 @@ function QuestionnairesPage() {
                 {q.category && <Badge variant="secondary">{q.category}</Badge>}
               </div>
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{q.questionnaire_questions?.length ?? 0} questions</span>
+                {q.scoring_method === "image" ? (
+                  <span>
+                    <ImageIcon className="inline h-3 w-3 mr-1" />
+                    Image File
+                  </span>
+                ) : (
+                  <span>{q.questionnaire_questions?.length ?? 0} questions</span>
+                )}
                 <span>· scoring: {q.scoring_method}</span>
                 {q.mcid !== null && <span>· MCID {q.mcid}</span>}
                 {q.mdc !== null && <span>· MDC {q.mdc}</span>}
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setViewId(q.id)}>
-                  <ClipboardList className="mr-2 h-4 w-4" /> View
-                </Button>
+                {q.scoring_method === "image" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      window.open(
+                        (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
+                          q.scoring_formula,
+                        "_blank",
+                      )
+                    }
+                  >
+                    <Printer className="mr-2 h-4 w-4" /> Print / View
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => setViewId(q.id)}>
+                    <ClipboardList className="mr-2 h-4 w-4" /> View
+                  </Button>
+                )}
                 {canEditClinical && (
                   <>
                     <Button variant="ghost" size="icon" onClick={() => void startEdit(q.id)}>
@@ -607,6 +727,51 @@ function QuestionnairesPage() {
               </div>
             )}
 
+            {meta.scoring_method === "image" && (
+              <div className="space-y-2">
+                <Label>Questionnaire Image File</Label>
+                <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center gap-2">
+                  <UploadCloud className="h-8 w-8 text-muted-foreground mb-2" />
+                  {imageFile ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-sm font-medium">{imageFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(imageFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setImageFile(null)}
+                        className="mt-2 text-destructive"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium">Click to select an image</p>
+                      <p className="text-xs text-muted-foreground">PNG, JPG, PDF up to 10MB</p>
+                      <Input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setImageFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+                {editingId && !imageFile && (
+                  <p className="text-xs text-muted-foreground">
+                    A file is already uploaded. Selecting a new file will overwrite it.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
@@ -655,162 +820,176 @@ function QuestionnairesPage() {
             </div>
 
             {/* Interpretation bands */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Interpretation bands</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBands([...bands, { min: 0, max: 0, label: "" }])}
-                >
-                  <Plus className="mr-1 h-3 w-3" /> Band
-                </Button>
-              </div>
-              {bands.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    className="w-20"
-                    value={b.min}
-                    onChange={(e) =>
-                      setBands(
-                        bands.map((x, xi) =>
-                          xi === i ? { ...x, min: Number(e.target.value) } : x,
-                        ),
-                      )
-                    }
-                  />
-                  <span className="text-muted-foreground">–</span>
-                  <Input
-                    type="number"
-                    className="w-20"
-                    value={b.max}
-                    onChange={(e) =>
-                      setBands(
-                        bands.map((x, xi) =>
-                          xi === i ? { ...x, max: Number(e.target.value) } : x,
-                        ),
-                      )
-                    }
-                  />
-                  <Input
-                    placeholder="Minimal disability"
-                    value={b.label}
-                    onChange={(e) =>
-                      setBands(
-                        bands.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
-                      )
-                    }
-                  />
+            {meta.scoring_method !== "image" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Interpretation bands</Label>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setBands(bands.filter((_, xi) => xi !== i))}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBands([...bands, { min: 0, max: 0, label: "" }])}
                   >
-                    <X className="h-4 w-4" />
+                    <Plus className="mr-1 h-3 w-3" /> Band
                   </Button>
                 </div>
-              ))}
-            </div>
-
-            {/* Questions */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Questions (max possible raw score: {maxPossible})</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setQuestions([...questions, emptyQuestion()])}
-                >
-                  <Plus className="mr-1 h-3 w-3" /> Question
-                </Button>
-              </div>
-              {questions.map((q, qi) => (
-                <Card key={qi}>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm">Question {qi + 1}</CardTitle>
+                {bands.map((b, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      className="w-20"
+                      value={b.min}
+                      onChange={(e) =>
+                        setBands(
+                          bands.map((x, xi) =>
+                            xi === i ? { ...x, min: Number(e.target.value) } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <span className="text-muted-foreground">–</span>
+                    <Input
+                      type="number"
+                      className="w-20"
+                      value={b.max}
+                      onChange={(e) =>
+                        setBands(
+                          bands.map((x, xi) =>
+                            xi === i ? { ...x, max: Number(e.target.value) } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Input
+                      placeholder="Minimal disability"
+                      value={b.label}
+                      onChange={(e) =>
+                        setBands(
+                          bands.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
+                        )
+                      }
+                    />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      onClick={() => setQuestions(questions.filter((_, i) => i !== qi))}
+                      onClick={() => setBands(bands.filter((_, xi) => xi !== i))}
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      placeholder="Question text"
-                      value={q.text}
-                      onChange={(e) => updateQuestion(qi, { text: e.target.value })}
-                    />
-                    <Input
-                      placeholder="نص السؤال بالعربية (اختياري)"
-                      value={q.text_ar}
-                      onChange={(e) => updateQuestion(qi, { text_ar: e.target.value })}
-                    />
-                    <div className="space-y-2">
-                      {q.options.map((o, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          <Input
-                            placeholder={`Answer option ${oi + 1}`}
-                            value={o.label}
-                            onChange={(e) =>
-                              updateQuestion(qi, {
-                                options: q.options.map((x, xi) =>
-                                  xi === oi ? { ...x, label: e.target.value } : x,
-                                ),
-                              })
-                            }
-                          />
-                          <Input
-                            type="number"
-                            step="any"
-                            className="w-24"
-                            value={o.score}
-                            onChange={(e) =>
-                              updateQuestion(qi, {
-                                options: q.options.map((x, xi) =>
-                                  xi === oi ? { ...x, score: e.target.value } : x,
-                                ),
-                              })
-                            }
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              updateQuestion(qi, {
-                                options: q.options.filter((_, xi) => xi !== oi),
-                              })
-                            }
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Questions */}
+            {meta.scoring_method !== "image" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Questions (max possible raw score: {maxPossible})</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuestions([...questions, emptyQuestion()])}
+                  >
+                    <Plus className="mr-1 h-3 w-3" /> Question
+                  </Button>
+                </div>
+                {questions.map((q, qi) => (
+                  <Card key={qi}>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm">Question {qi + 1}</CardTitle>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          updateQuestion(qi, { options: [...q.options, emptyOption()] })
-                        }
+                        size="icon"
+                        onClick={() => setQuestions(questions.filter((_, i) => i !== qi))}
                       >
-                        <Plus className="mr-1 h-3 w-3" /> Answer option
+                        <X className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Input
+                        placeholder="Question text"
+                        value={q.text}
+                        onChange={(e) => updateQuestion(qi, { text: e.target.value })}
+                      />
+                      <Input
+                        placeholder="نص السؤال بالعربية (اختياري)"
+                        value={q.text_ar}
+                        onChange={(e) => updateQuestion(qi, { text_ar: e.target.value })}
+                      />
+                      <div className="space-y-2">
+                        {q.options.map((o, oi) => (
+                          <div key={oi} className="flex items-center gap-2">
+                            <Input
+                              placeholder={`Answer option ${oi + 1}`}
+                              value={o.label}
+                              onChange={(e) =>
+                                updateQuestion(qi, {
+                                  options: q.options.map((x, xi) =>
+                                    xi === oi ? { ...x, label: e.target.value } : x,
+                                  ),
+                                })
+                              }
+                            />
+                            <Input
+                              type="number"
+                              step="any"
+                              className="w-24"
+                              value={o.score}
+                              onChange={(e) =>
+                                updateQuestion(qi, {
+                                  options: q.options.map((x, xi) =>
+                                    xi === oi ? { ...x, score: e.target.value } : x,
+                                  ),
+                                })
+                              }
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() =>
+                                updateQuestion(qi, {
+                                  options: q.options.filter((_, xi) => xi !== oi),
+                                })
+                              }
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            updateQuestion(qi, { options: [...q.options, emptyOption()] })
+                          }
+                        >
+                          <Plus className="mr-1 h-3 w-3" /> Answer option
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
 
-            <Button type="submit" className="w-full" disabled={save.isPending || isChecking}>
-              {isChecking ? "Checking impact..." : save.isPending ? "Saving…" : editingId ? "Save changes" : "Create questionnaire"}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={save.isPending || isChecking || isUploading}
+            >
+              {isChecking
+                ? "Checking impact..."
+                : save.isPending || isUploading
+                  ? "Saving…"
+                  : editingId
+                    ? "Save changes"
+                    : "Create questionnaire"}
             </Button>
           </form>
         </DialogContent>
@@ -826,21 +1005,33 @@ function QuestionnairesPage() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">
-              You are about to delete questions or options that have <strong>already been answered</strong> by patients.
+              You are about to delete questions or options that have{" "}
+              <strong>already been answered</strong> by patients.
             </p>
             <ul className="text-sm text-muted-foreground list-disc list-inside">
-              <li>Deleting a question will <strong>permanently erase</strong> patient answers for that question.</li>
-              <li>Deleting an option will leave existing answers without a selected text (score will remain).</li>
+              <li>
+                Deleting a question will <strong>permanently erase</strong> patient answers for that
+                question.
+              </li>
+              <li>
+                Deleting an option will leave existing answers without a selected text (score will
+                remain).
+              </li>
             </ul>
             <p className="text-sm font-semibold text-foreground">
               Are you absolutely sure you want to proceed?
             </p>
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={() => setWarningOpen(false)}>Cancel</Button>
-              <Button variant="destructive" onClick={() => {
-                setWarningOpen(false);
-                save.mutate(pendingDeleteIds);
-              }}>
+              <Button variant="outline" onClick={() => setWarningOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setWarningOpen(false);
+                  save.mutate(pendingDeleteIds);
+                }}
+              >
                 Yes, delete and save
               </Button>
             </div>
