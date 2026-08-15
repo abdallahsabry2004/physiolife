@@ -414,15 +414,18 @@ function BillingPage() {
     return { paidAmount, remaining };
   };
 
-  const handleExportPDF = async (type: "invoice" | "payment" | "history", data: any) => {
+  const handleExportPDF = async (
+    type: "invoice" | "payment" | "history",
+    data: Record<string, unknown>,
+  ) => {
     setIsGeneratingPDF(true);
     setPrintData({ type, data });
 
     try {
       const { generatePDF } = await import("@/lib/pdf");
-      
+
       // Wait for any UI updates to render
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       let filename = "Document.pdf";
       if (type === "invoice") filename = `Invoice_${data.invoice_number}.pdf`;
