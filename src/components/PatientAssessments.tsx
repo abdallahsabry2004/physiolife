@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Plus, Trash2, Eye } from "lucide-react"; // أضفنا أيقونة Eye
+import { ClipboardList, Plus, Trash2, Eye, Printer } from "lucide-react";
 import { toast } from "sonner";
 import {
   Line,
@@ -30,7 +30,13 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type Option = { id: string; label: string; label_ar: string | null; score: number; sort_order: number };
+type Option = {
+  id: string;
+  label: string;
+  label_ar: string | null;
+  score: number;
+  sort_order: number;
+};
 type Question = {
   id: string;
   text: string;
@@ -45,6 +51,7 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [imageManualScore, setImageManualScore] = useState("");
   const [assessedOn, setAssessedOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
 
@@ -56,7 +63,9 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("questionnaires")
-        .select("id, name, name_ar, category, mcid, mdc, min_score, max_score, scoring_method, scoring_formula, interpretation")
+        .select(
+          "id, name, name_ar, category, mcid, mdc, min_score, max_score, scoring_method, scoring_formula, interpretation",
+        )
         .order("name");
       if (error) throw error;
       return data;
@@ -99,12 +108,14 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("patient_assessment_answers")
-        .select(`
+        .select(
+          `
           id,
           score,
           questionnaire_questions ( text ),
           questionnaire_options ( label )
-        `)
+        `,
+        )
         .eq("assessment_id", viewAssessmentId!);
       if (error) throw error;
       return data;
@@ -125,6 +136,16 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
 
   const live = useMemo(() => {
     if (!activeQ) return { raw: 0, max: 0, answered: 0, final: 0, interpretation: "" };
+    if (activeQ.scoring_method === "image") {
+      const final = Number(imageManualScore) || 0;
+      return {
+        raw: final,
+        max: activeQ.max_score !== null ? Number(activeQ.max_score) : 0,
+        answered: 1, // acts as valid
+        final,
+        interpretation: "",
+      };
+    }
     let raw = 0;
     let answered = 0;
     let max = 0;
@@ -151,12 +172,13 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
       final,
       interpretation: interpretScore(parseBands(activeQ.interpretation), final),
     };
-  }, [activeQ, questions, answers]);
+  }, [activeQ, questions, answers, imageManualScore]);
 
   const submit = useMutation({
     mutationFn: async () => {
       if (!activeQ) throw new Error("Select a questionnaire");
-      if (live.answered === 0) throw new Error("Answer at least one question");
+      if (live.answered === 0 && activeQ.scoring_method !== "image")
+        throw new Error("Answer at least one question");
       const maxPossible = activeQ.max_score !== null ? Number(activeQ.max_score) : live.max;
       const { data: created, error } = await supabase
         .from("patient_assessments")
@@ -204,6 +226,7 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
       toast.success("Assessment saved");
       setOpen(false);
       setAnswers({});
+      setImageManualScore("");
       setNotes("");
       setSelectedId("");
       void qc.invalidateQueries({ queryKey: ["patient-assessments", patientId] });
@@ -336,12 +359,7 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                         />
                       </>
                     )}
-                    <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="var(--chart-1)"
-                      strokeWidth={2}
-                    />
+                    <Line type="monotone" dataKey="score" stroke="var(--chart-1)" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -406,20 +424,37 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
             {isLoadingDetails ? (
               <p className="text-sm text-muted-foreground text-center py-4">Loading answers...</p>
             ) : assessmentDetails.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No detailed answers found for this assessment.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No detailed answers found for this assessment.
+              </p>
             ) : (
               <div className="space-y-3">
-                {assessmentDetails.map((ans: any, idx: number) => (
-                  <div key={ans.id} className="rounded-lg border p-3 bg-secondary/10">
-                    <p className="font-medium text-sm mb-1">
-                      {idx + 1}. {ans.questionnaire_questions?.text || "Unknown Question"}
-                    </p>
-                    <div className="flex justify-between items-center text-sm text-muted-foreground">
-                      <p>Answer: <span className="font-semibold text-primary">{ans.questionnaire_options?.label || "Unknown Option"}</span></p>
-                      <Badge variant="outline">Score: {ans.score}</Badge>
+                {assessmentDetails.map(
+                  (
+                    ans: {
+                      id: string;
+                      score: number;
+                      questionnaire_questions: { text: string } | null;
+                      questionnaire_options: { label: string } | null;
+                    },
+                    idx: number,
+                  ) => (
+                    <div key={ans.id} className="rounded-lg border p-3 bg-secondary/10">
+                      <p className="font-medium text-sm mb-1">
+                        {idx + 1}. {ans.questionnaire_questions?.text || "Unknown Question"}
+                      </p>
+                      <div className="flex justify-between items-center text-sm text-muted-foreground">
+                        <p>
+                          Answer:{" "}
+                          <span className="font-semibold text-primary">
+                            {ans.questionnaire_options?.label || "Unknown Option"}
+                          </span>
+                        </p>
+                        <Badge variant="outline">Score: {ans.score}</Badge>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -469,32 +504,63 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
               </div>
             </div>
 
-            {questions.map((q, qi) => (
-              <div key={q.id} className="space-y-2 rounded-lg border p-3">
-                <p className="text-sm font-medium">
-                  {qi + 1}. {q.text}
+            {activeQ?.scoring_method === "image" ? (
+              <div className="space-y-4 rounded-lg border p-4">
+                <p className="text-sm text-muted-foreground">
+                  This is an image-based questionnaire.
                 </p>
-                <div className="space-y-1">
-                  {q.questionnaire_options.map((o) => (
-                    <label
-                      key={o.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted"
-                    >
-                      <input
-                        type="radio"
-                        name={q.id}
-                        checked={answers[q.id] === o.id}
-                        onChange={() => setAnswers({ ...answers, [q.id]: o.id })}
-                      />
-                      <span>{o.label}</span>
-                      <span className="ms-auto font-mono text-xs text-muted-foreground">
-                        {Number(o.score)}
-                      </span>
-                    </label>
-                  ))}
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    window.open(
+                      (activeQ.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
+                        activeQ.scoring_formula,
+                      "_blank",
+                    )
+                  }
+                  type="button"
+                >
+                  <Printer className="mr-2 h-4 w-4" /> Print / View Image
+                </Button>
+                <div className="space-y-2 mt-4">
+                  <Label>Patient Result (Score)</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="Enter result..."
+                    value={imageManualScore}
+                    onChange={(e) => setImageManualScore(e.target.value)}
+                  />
                 </div>
               </div>
-            ))}
+            ) : (
+              questions.map((q, qi) => (
+                <div key={q.id} className="space-y-2 rounded-lg border p-3">
+                  <p className="text-sm font-medium">
+                    {qi + 1}. {q.text}
+                  </p>
+                  <div className="space-y-1">
+                    {q.questionnaire_options.map((o) => (
+                      <label
+                        key={o.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="radio"
+                          name={q.id}
+                          checked={answers[q.id] === o.id}
+                          onChange={() => setAnswers({ ...answers, [q.id]: o.id })}
+                        />
+                        <span>{o.label}</span>
+                        <span className="ms-auto font-mono text-xs text-muted-foreground">
+                          {Number(o.score)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
 
             {selectedId && (
               <>
