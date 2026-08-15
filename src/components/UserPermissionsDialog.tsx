@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Shield } from "lucide-react";
+import { Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { RESTRICTED_PAGES, type PageKey } from "@/lib/auth";
@@ -33,6 +33,7 @@ export function UserPermissionsDialog({
 }) {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
+
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<Record<PageKey, boolean>>({
     dashboard: false,
@@ -40,7 +41,7 @@ export function UserPermissionsDialog({
     analytics: false,
   });
 
-  const { data: perms } = useQuery({
+  const { data: perms, isLoading } = useQuery({
     queryKey: ["user_page_permissions", userId],
     enabled: open,
     queryFn: async () => {
@@ -95,6 +96,7 @@ export function UserPermissionsDialog({
         <DialogHeader>
           <DialogTitle>{t("perm.dialogTitle")}</DialogTitle>
         </DialogHeader>
+
         <p className="text-sm text-muted-foreground">{userName}</p>
 
         {isSuperAdmin ? (
@@ -103,6 +105,10 @@ export function UserPermissionsDialog({
               ? "المسؤول الأعلى لديه وصول كامل لجميع الصفحات."
               : "Super admins always have full access to every page."}
           </p>
+        ) : isLoading ? (
+          <div className="flex justify-center p-6">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
         ) : (
           <div className="space-y-3">
             {RESTRICTED_PAGES.map((page) => (
@@ -117,11 +123,8 @@ export function UserPermissionsDialog({
                 />
               </div>
             ))}
-            <Button
-              className="w-full"
-              disabled={save.isPending}
-              onClick={() => save.mutate()}
-            >
+
+            <Button className="w-full" disabled={save.isPending} onClick={() => save.mutate()}>
               {t("common.save")}
             </Button>
           </div>
