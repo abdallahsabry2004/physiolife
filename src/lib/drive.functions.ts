@@ -321,6 +321,24 @@ export const deletePatientFile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deleteDriveFile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { driveFileId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const auth = await getGoogleAuth();
+      const { token } = await auth.getAccessToken();
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { ok: true };
+    } catch (e) {
+      console.error("Drive delete failed", e);
+      throw new Error("Failed to delete from Drive");
+    }
+  });
+
 // 6. مساحة التخزين
 export const getDriveQuota = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
