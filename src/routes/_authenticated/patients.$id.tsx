@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { logActivityAsync } from "@/lib/logger";
+import { deleteAllPatientDriveFiles } from "@/lib/drive.functions";
 import { ClinicalModule } from "@/components/ClinicalModule";
 import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
@@ -57,6 +59,7 @@ function PatientDetail() {
   const navigate = useNavigate();
   const { user, fullName, canEditClinical } = useAuth();
   const qc = useQueryClient();
+  const deleteDriveFiles = useServerFn(deleteAllPatientDriveFiles);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
@@ -174,6 +177,12 @@ function PatientDetail() {
       });
       if (authError) throw new Error("Invalid password");
 
+      try {
+        await deleteDriveFiles({ data: { patientId: id } });
+      } catch (err) {
+        console.error("Failed to delete drive files before deleting patient", err);
+      }
+
       const { error: deleteError } = await supabase.rpc("delete_patient_completely", { p_id: id });
       if (deleteError) throw deleteError;
 
@@ -271,13 +280,13 @@ function PatientDetail() {
 
     try {
       const { generatePDF } = await import("@/lib/pdf");
-      
+
       // Wait for any UI updates to render
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
       await generatePDF(
-        "patient-report-pdf-container", 
-        `Patient_Report_${patient?.full_name?.replace(/\s+/g, "_") || "Report"}.pdf`
+        "patient-report-pdf-container",
+        `Patient_Report_${patient?.full_name?.replace(/\s+/g, "_") || "Report"}.pdf`,
       );
       toast.success("Medical Report Downloaded successfully!");
     } catch (error) {
