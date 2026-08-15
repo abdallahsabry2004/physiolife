@@ -1,7 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, UserX, UserCheck, Search, Printer, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import {
+  HardDrive,
+  Plus,
+  UserX,
+  UserCheck,
+  Search,
+  Printer,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
@@ -13,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { getDriveQuota } from "@/lib/drive.functions";
-import { GOOGLE_SHEETS_WEBHOOK_URL } from "@/lib/logger"; 
+import { GOOGLE_SHEETS_WEBHOOK_URL, logActivityAsync } from "@/lib/logger";
 import {
   Select,
   SelectContent,
@@ -41,20 +54,22 @@ export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
 
-const ROLES: AppRole[] = ["super_admin", "therapist", "receptionist", "assistant"];
+const ROLES: AppRole[] = ["super_admin", "therapist", "receptionist", "assistant", "trainee"];
 
 function AdminPage() {
-  const { isAdmin, fullName } = useAuth();
+  const { user, isAdmin, fullName } = useAuth();
   const qc = useQueryClient();
-  
+
   // حالات التحكم في البحث وتقسيم الصفحات للسجلات
   const [logSearchInput, setLogSearchInput] = useState("");
   const [logSearchTerm, setLogSearchTerm] = useState("");
   const [logPage, setLogPage] = useState(1);
   const [logPageSize, setLogPageSize] = useState(20);
-  
+
   // حالة التحكم في نافذة عرض التفاصيل للسجلات
-  const [selectedLogDetails, setSelectedLogDetails] = useState<any>(null);
+  const [selectedLogDetails, setSelectedLogDetails] = useState<Record<string, unknown> | null>(
+    null,
+  );
 
   // نظام الـ Debounce لتحديث كلمة البحث بعد التوقف عن الكتابة لتخفيف الضغط
   useEffect(() => {
@@ -74,22 +89,31 @@ function AdminPage() {
   });
 
   const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(2);
-  const usagePercentage = driveQuota?.limit 
-    ? Math.min((driveQuota.usage / driveQuota.limit) * 100, 100) 
+  const usagePercentage = driveQuota?.limit
+    ? Math.min((driveQuota.usage / driveQuota.limit) * 100, 100)
     : 0;
 
   const { data: staff = [] } = useQuery({
     queryKey: ["staff"],
     queryFn: async () => {
-      const [{ data: profiles, error }, { data: roles }] = await Promise.all([
+      const [{ data: profiles, error }, { data: roles }, { data: perms }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, email, is_active"),
         supabase.from("user_roles").select("user_id, role"),
+        supabase.from("user_page_permissions").select("user_id, page, allowed"),
       ]);
       if (error) throw error;
-      return (profiles ?? []).map((p) => ({
-        ...p,
-        roles: (roles ?? []).filter((r) => r.user_id === p.id).map((r) => r.role as AppRole),
-      }));
+      return (profiles ?? []).map((p) => {
+        const isTrainee = (perms ?? []).some(
+          (perm) => perm.user_id === p.id && perm.page === "trainee" && perm.allowed,
+        );
+        const userRoles: AppRole[] = isTrainee
+          ? ["trainee"]
+          : (roles ?? []).filter((r) => r.user_id === p.id).map((r) => r.role as AppRole);
+        return {
+          ...p,
+          roles: userRoles,
+        };
+      });
     },
   });
 
@@ -121,7 +145,7 @@ function AdminPage() {
         const res = await fetch(url.toString(), { redirect: "follow" });
         if (!res.ok) throw new Error("Failed to fetch logs from Google Sheets");
         const data = await res.json();
-        
+
         // إرجاع البيانات والعدد الإجمالي القادم من سيرفرات جوجل
         return { items: data.items || [], total: data.total || 0 };
       } catch (err) {
@@ -138,8 +162,33 @@ function AdminPage() {
     mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
       const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
       if (delErr) throw delErr;
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
-      if (error) throw error;
+
+      if (role === "trainee") {
+        // نضع assistant في قاعدة البيانات حتى يتوافق مع Postgres Enum وتبقى صلاحيات القراءة تعمل
+        const { error: rErr } = await supabase
+          .from("user_roles")
+          .insert({ user_id: userId, role: "assistant" });
+        if (rErr) throw rErr;
+
+        // نحفظ صفة المتدرب في الصلاحيات
+        const { error: pErr } = await supabase
+          .from("user_page_permissions")
+          .upsert(
+            { user_id: userId, page: "trainee", allowed: true },
+            { onConflict: "user_id,page" },
+          );
+        if (pErr) throw pErr;
+      } else {
+        // إزالة وسم المتدرب إن وجد
+        await supabase
+          .from("user_page_permissions")
+          .delete()
+          .eq("user_id", userId)
+          .eq("page", "trainee");
+
+        const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Role updated");
@@ -150,9 +199,12 @@ function AdminPage() {
 
   const toggleUser = useMutation({
     mutationFn: async ({ userId, activate }: { userId: string; activate: boolean }) => {
-      const { error: pErr } = await supabase.from("profiles").update({ is_active: activate }).eq("id", userId);
+      const { error: pErr } = await supabase
+        .from("profiles")
+        .update({ is_active: activate })
+        .eq("id", userId);
       if (pErr) throw pErr;
-      
+
       if (!activate) {
         const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
         if (rErr) throw rErr;
@@ -165,38 +217,77 @@ function AdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteTrainee = useMutation({
+    mutationFn: async ({
+      userId,
+      email,
+      name,
+    }: {
+      userId: string;
+      email?: string | null;
+      name?: string | null;
+    }) => {
+      await supabase.from("user_page_permissions").delete().eq("user_id", userId);
+      const { error: rErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
+      if (rErr) throw rErr;
+      const { error: pErr } = await supabase.from("profiles").delete().eq("id", userId);
+      if (pErr) throw pErr;
+
+      logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "DELETE_TRAINEE_USER",
+        entity: `Trainee: ${name || email || userId}`,
+        details: { userId, email },
+      });
+    },
+    onSuccess: () => {
+      toast.success("Trainee account permanently deleted");
+      void qc.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   if (!isAdmin) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Administration is limited to super admins.
-      </p>
+      <p className="text-sm text-muted-foreground">Administration is limited to super admins.</p>
     );
   }
 
   // دالة لفك تشفير وتنسيق الـ JSON الخاص بالتفاصيل
   const renderLogDetails = () => {
-    if (!selectedLogDetails || !selectedLogDetails.details) return <p className="text-muted-foreground">No extra details available.</p>;
+    if (!selectedLogDetails || !selectedLogDetails.details)
+      return <p className="text-muted-foreground">No extra details available.</p>;
     try {
-      const parsedDetails = typeof selectedLogDetails.details === 'string' 
-        ? JSON.parse(selectedLogDetails.details) 
-        : selectedLogDetails.details;
-        
-      if (Object.keys(parsedDetails).length === 0) return <p className="text-muted-foreground">No extra details available.</p>;
+      const parsedDetails =
+        typeof selectedLogDetails.details === "string"
+          ? JSON.parse(selectedLogDetails.details)
+          : selectedLogDetails.details;
+
+      if (Object.keys(parsedDetails).length === 0)
+        return <p className="text-muted-foreground">No extra details available.</p>;
 
       return (
         <div className="space-y-2 mt-4 bg-muted/30 p-4 rounded-md border">
           {Object.entries(parsedDetails).map(([key, value]) => (
-            <div key={key} className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
-              <span className="font-semibold text-muted-foreground capitalize col-span-1">{key.replace(/_/g, ' ')}:</span>
+            <div
+              key={key}
+              className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0"
+            >
+              <span className="font-semibold text-muted-foreground capitalize col-span-1">
+                {key.replace(/_/g, " ")}:
+              </span>
               <span className="col-span-2 break-words">
-                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                {typeof value === "object" ? JSON.stringify(value) : String(value)}
               </span>
             </div>
           ))}
         </div>
       );
     } catch (e) {
-      return <p className="text-sm text-muted-foreground break-all">{selectedLogDetails.details}</p>;
+      return (
+        <p className="text-sm text-muted-foreground break-all">{selectedLogDetails.details}</p>
+      );
     }
   };
 
@@ -232,48 +323,104 @@ function AdminPage() {
                     {r.replace("_", " ")}
                   </Badge>
                 ))}
-                
+
                 <UserPermissionsDialog
                   userId={s.id}
                   userName={s.full_name || s.email || ""}
                   isSuperAdmin={s.roles.includes("super_admin")}
+                  isTrainee={s.roles.includes("trainee")}
                 />
 
                 {s.is_active ? (
                   <>
-                    <Select onValueChange={(v) => setRole.mutate({ userId: s.id, role: v as AppRole })}>
+                    <Select
+                      onValueChange={(v) => setRole.mutate({ userId: s.id, role: v as AppRole })}
+                    >
                       <SelectTrigger className="w-44">
                         <SelectValue placeholder="Change role" />
                       </SelectTrigger>
                       <SelectContent>
                         {ROLES.map((r) => (
                           <SelectItem key={r} value={r} className="capitalize">
-                            {r.replace("_", " ")}
+                            {r === "trainee" ? "Trainee" : r.replace("_", " ")}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => {
-                        if (confirm("Are you sure you want to deactivate this user? They will lose access to the system.")) {
-                          toggleUser.mutate({ userId: s.id, activate: false });
-                        }
-                      }}
-                      title="Deactivate User"
-                    >
-                      <UserX className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {s.roles.includes("trainee") ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Are you sure you want to PERMANENTLY DELETE trainee ${s.full_name || s.email}? This action cannot be undone.`,
+                            )
+                          ) {
+                            deleteTrainee.mutate({
+                              userId: s.id,
+                              email: s.email,
+                              name: s.full_name,
+                            });
+                          }
+                        }}
+                        title="Delete Trainee Permanently"
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Are you sure you want to deactivate this user? They will lose access to the system.",
+                            )
+                          ) {
+                            toggleUser.mutate({ userId: s.id, activate: false });
+                          }
+                        }}
+                        title="Deactivate User"
+                      >
+                        <UserX className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
                   </>
                 ) : (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => toggleUser.mutate({ userId: s.id, activate: true })}
-                  >
-                    <UserCheck className="mr-2 h-4 w-4" /> Restore Access
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleUser.mutate({ userId: s.id, activate: true })}
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" /> Restore Access
+                    </Button>
+                    {s.roles.includes("trainee") && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Are you sure you want to PERMANENTLY DELETE trainee ${s.full_name || s.email}? This action cannot be undone.`,
+                            )
+                          ) {
+                            deleteTrainee.mutate({
+                              userId: s.id,
+                              email: s.email,
+                              name: s.full_name,
+                            });
+                          }
+                        }}
+                        title="Delete Trainee Permanently"
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -303,16 +450,22 @@ function AdminPage() {
             </div>
             <Progress value={usagePercentage} className="h-2 w-full" />
             <p className="text-[10px] text-muted-foreground mt-1">
-              This shows the actual storage limits of the Google Drive account currently authorized via the system API.
+              This shows the actual storage limits of the Google Drive account currently authorized
+              via the system API.
             </p>
           </div>
 
           <div className="space-y-2">
             {accounts.map((a) => (
-              <div key={a.id} className="flex justify-between items-center rounded-lg border p-3 text-sm">
+              <div
+                key={a.id}
+                className="flex justify-between items-center rounded-lg border p-3 text-sm"
+              >
                 <div>
                   <p className="font-medium">{a.email}</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Folder: {a.root_folder_id || "N/A"}</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                    Folder: {a.root_folder_id || "N/A"}
+                  </p>
                 </div>
                 <Badge variant={a.is_primary ? "default" : "secondary"}>
                   {a.is_primary ? "primary" : a.is_active ? "active" : "inactive"}
@@ -348,7 +501,7 @@ function AdminPage() {
             </Button>
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-2 print:p-0">
           <div className="hidden print:block border-b-2 border-primary pb-6 mb-6">
             <div className="flex justify-between items-start">
@@ -356,49 +509,79 @@ function AdminPage() {
                 <img src={logo} alt="Physio Life" className="h-16 w-16" />
                 <div>
                   <h2 className="text-2xl font-bold text-primary">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600">Physical Therapy & Rehabilitation</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    Physical Therapy & Rehabilitation
+                  </p>
                 </div>
               </div>
               <div className="text-right text-xs text-gray-500 space-y-1">
-                <p><span className="font-semibold text-gray-700">Print Date:</span> {new Date().toLocaleString('en-GB')}</p>
-                <p><span className="font-semibold text-gray-700">Printed by:</span> {fullName}</p>
+                <p>
+                  <span className="font-semibold text-gray-700">Print Date:</span>{" "}
+                  {new Date().toLocaleString("en-GB")}
+                </p>
+                <p>
+                  <span className="font-semibold text-gray-700">Printed by:</span> {fullName}
+                </p>
               </div>
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mt-6 text-center">System Activity & Audit Log Report</h3>
+            <h3 className="text-xl font-bold text-gray-800 mt-6 text-center">
+              System Activity & Audit Log Report
+            </h3>
           </div>
 
           {logsLoading ? (
-            <p className="text-sm text-muted-foreground print:text-black">Loading activity logs...</p>
+            <p className="text-sm text-muted-foreground print:text-black">
+              Loading activity logs...
+            </p>
           ) : logsData?.items?.length === 0 ? (
-            <p className="text-sm text-muted-foreground print:text-black">No recorded activity matches your search.</p>
+            <p className="text-sm text-muted-foreground print:text-black">
+              No recorded activity matches your search.
+            </p>
           ) : (
             <div className="space-y-2">
-              {logsData?.items?.map((l: any, index: number) => (
-                <div key={index} className="flex justify-between items-center rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0">
-                  <div className="flex flex-col flex-1">
-                    <span className="font-medium print:text-black text-primary">{l.action}</span>
-                    <span className="text-muted-foreground print:text-black text-xs mt-1">
-                      <span className="font-bold text-gray-700 mr-1">User:</span>{l.user_name || "System"}
-                    </span>
-                  </div>
-                  <div className="text-muted-foreground print:text-black mt-2 sm:mt-0 flex items-center justify-end gap-3 flex-1 text-right">
-                    <div>
-                      <div className="font-medium">{l.entity}</div>
-                      <div className="text-xs">{l.created_at ? new Date(l.created_at).toLocaleString('en-GB') : ""}</div>
+              {logsData?.items?.map(
+                (
+                  l: {
+                    action: string;
+                    user_name?: string | null;
+                    entity: string;
+                    created_at: string;
+                    details?: Record<string, unknown> | null;
+                  },
+                  index: number,
+                ) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center rounded-lg border p-3 text-sm print:border-b print:border-x-0 print:border-t-0 print:rounded-none print:px-0"
+                  >
+                    <div className="flex flex-col flex-1">
+                      <span className="font-medium print:text-black text-primary">{l.action}</span>
+                      <span className="text-muted-foreground print:text-black text-xs mt-1">
+                        <span className="font-bold text-gray-700 mr-1">User:</span>
+                        {l.user_name || "System"}
+                      </span>
                     </div>
-                    {/* زرار عرض التفاصيل (Eye) يظهر في الشاشة فقط وليس الطباعة */}
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="print:hidden text-primary shrink-0" 
-                      onClick={() => setSelectedLogDetails(l)}
-                      title="View Details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="text-muted-foreground print:text-black mt-2 sm:mt-0 flex items-center justify-end gap-3 flex-1 text-right">
+                      <div>
+                        <div className="font-medium">{l.entity}</div>
+                        <div className="text-xs">
+                          {l.created_at ? new Date(l.created_at).toLocaleString("en-GB") : ""}
+                        </div>
+                      </div>
+                      {/* زرار عرض التفاصيل (Eye) يظهر في الشاشة فقط وليس الطباعة */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="print:hidden text-primary shrink-0"
+                        onClick={() => setSelectedLogDetails(l)}
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
 
@@ -406,11 +589,16 @@ function AdminPage() {
             <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-4 mt-4 print:hidden">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Rows per page:</span>
-                <Select 
-                  value={String(logPageSize)} 
-                  onValueChange={(v) => { setLogPageSize(Number(v)); setLogPage(1); }}
+                <Select
+                  value={String(logPageSize)}
+                  onValueChange={(v) => {
+                    setLogPageSize(Number(v));
+                    setLogPage(1);
+                  }}
                 >
-                  <SelectTrigger className="w-[80px] h-8"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[80px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10</SelectItem>
                     <SelectItem value="20">20</SelectItem>
@@ -424,16 +612,18 @@ function AdminPage() {
                   Page {logPage} of {totalLogPages} (Total: {logsData.total})
                 </span>
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" size="sm" 
-                    onClick={() => setLogPage(p => Math.max(1, p - 1))} 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLogPage((p) => Math.max(1, p - 1))}
                     disabled={logPage === 1}
                   >
                     <ChevronLeft className="h-4 w-4 mr-1" /> Prev
                   </Button>
-                  <Button 
-                    variant="outline" size="sm" 
-                    onClick={() => setLogPage(p => p + 1)} 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLogPage((p) => p + 1)}
                     disabled={logPage >= totalLogPages}
                   >
                     Next <ChevronRight className="h-4 w-4 ml-1" />
@@ -446,17 +636,34 @@ function AdminPage() {
       </Card>
 
       {/* نافذة تفاصيل العملية (Log Details Modal) */}
-      <Dialog open={!!selectedLogDetails} onOpenChange={(open) => !open && setSelectedLogDetails(null)}>
+      <Dialog
+        open={!!selectedLogDetails}
+        onOpenChange={(open) => !open && setSelectedLogDetails(null)}
+      >
         <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Activity Details</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-1">
-              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Action:</span> {selectedLogDetails?.action}</p>
-              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">User:</span> {selectedLogDetails?.user_name || "System"}</p>
-              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Entity:</span> {selectedLogDetails?.entity}</p>
-              <p className="text-sm"><span className="font-semibold text-muted-foreground mr-2">Time:</span> {selectedLogDetails?.created_at ? new Date(selectedLogDetails.created_at).toLocaleString('en-GB') : ""}</p>
+              <p className="text-sm">
+                <span className="font-semibold text-muted-foreground mr-2">Action:</span>{" "}
+                {selectedLogDetails?.action}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-muted-foreground mr-2">User:</span>{" "}
+                {selectedLogDetails?.user_name || "System"}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-muted-foreground mr-2">Entity:</span>{" "}
+                {selectedLogDetails?.entity}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-muted-foreground mr-2">Time:</span>{" "}
+                {selectedLogDetails?.created_at
+                  ? new Date(selectedLogDetails.created_at).toLocaleString("en-GB")
+                  : ""}
+              </p>
             </div>
             {renderLogDetails()}
           </div>
@@ -538,6 +745,43 @@ function ClinicalFieldCatalog() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const reorder = useMutation({
+    mutationFn: async ({ id, direction }: { id: string; direction: "up" | "down" }) => {
+      const itemIndex = fields.findIndex((f) => f.id === id);
+      if (itemIndex === -1) return;
+      const item = fields[itemIndex];
+
+      const moduleItems = fields.filter((f) => f.module === item.module);
+      const mItemIndex = moduleItems.findIndex((f) => f.id === id);
+
+      const mTargetIndex = direction === "up" ? mItemIndex - 1 : mItemIndex + 1;
+
+      if (mTargetIndex < 0 || mTargetIndex >= moduleItems.length) return;
+
+      // Swap items
+      [moduleItems[mItemIndex], moduleItems[mTargetIndex]] = [
+        moduleItems[mTargetIndex],
+        moduleItems[mItemIndex],
+      ];
+
+      const updates = moduleItems.map((f, idx) => ({
+        id: f.id,
+        sort_order: (idx + 1) * 10,
+      }));
+
+      await Promise.all(
+        updates.map((u) =>
+          supabase.from("clinical_fields").update({ sort_order: u.sort_order }).eq("id", u.id),
+        ),
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["clinical_fields_admin"] });
+      void qc.invalidateQueries({ queryKey: ["clinical_fields"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -545,6 +789,7 @@ function ClinicalFieldCatalog() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{t("cf.subtitle")}</p>
+
         <div className="grid gap-3 sm:grid-cols-4 items-end">
           <div className="space-y-1.5">
             <Label>{t("cf.module")}</Label>
@@ -563,7 +808,12 @@ function ClinicalFieldCatalog() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="cf-label">{t("cf.label")}</Label>
-            <Input id="cf-label" value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} />
+            <Input
+              id="cf-label"
+              value={label}
+              maxLength={120}
+              onChange={(e) => setLabel(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="cf-label-ar">{t("cf.labelAr")}</Label>
@@ -574,7 +824,6 @@ function ClinicalFieldCatalog() {
               onChange={(e) => setLabelAr(e.target.value)}
             />
           </div>
-
           {module === "body_chart" ? (
             <div className="space-y-1.5">
               <Label>Highlight Color</Label>
@@ -597,32 +846,73 @@ function ClinicalFieldCatalog() {
           ) : (
             <div className="hidden sm:block"></div>
           )}
-
           <div className="flex items-end sm:col-span-4 lg:col-span-1">
-            <Button className="w-full" disabled={!label.trim() || add.isPending} onClick={() => add.mutate()}>
+            <Button
+              className="w-full"
+              disabled={!label.trim() || add.isPending}
+              onClick={() => add.mutate()}
+            >
               <Plus className="mr-2 h-4 w-4" /> {t("cf.add")}
             </Button>
           </div>
         </div>
 
-        <div className="max-h-72 space-y-2 overflow-y-auto mt-4">
-          {fields.map((f) => {
-            const colorClass = (f.options as any)?.color?.split(" ")[0];
+        <div className="max-h-72 space-y-2 overflow-y-auto mt-4 pr-2">
+          {MODULES.map((mod) => {
+            const modFields = fields.filter((f) => f.module === mod);
+            if (modFields.length === 0) return null;
             return (
-              <div key={f.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
-                <span className="flex items-center gap-2">
-                  <Badge variant="secondary" className="capitalize">
-                    {f.module.replace("_", " ")}
-                  </Badge>
-                  {f.module === "body_chart" && colorClass && (
-                    <span className={`h-2.5 w-2.5 rounded-full ${colorClass}`}></span>
-                  )}
-                  {f.label}
-                  {f.label_ar ? <span className="text-muted-foreground"> · {f.label_ar}</span> : null}
-                </span>
-                <Button size="sm" variant="ghost" onClick={() => remove.mutate(f.id)}>
-                  {t("cf.delete")}
-                </Button>
+              <div key={mod} className="space-y-2">
+                <h4 className="text-sm font-medium capitalize mt-4 mb-2 text-muted-foreground">
+                  {mod.replace("_", " ")}
+                </h4>
+                {modFields.map((f, idx) => {
+                  const colorClass = (f.options as { color?: string } | null)?.color?.split(" ")[0];
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between rounded-lg border p-2 text-sm bg-card"
+                    >
+                      <span className="flex items-center gap-2">
+                        {f.module === "body_chart" && colorClass && (
+                          <span className={`h-2.5 w-2.5 rounded-full ${colorClass}`}></span>
+                        )}
+                        {f.label}
+                        {f.label_ar ? (
+                          <span className="text-muted-foreground"> · {f.label_ar}</span>
+                        ) : null}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          disabled={idx === 0 || reorder.isPending}
+                          onClick={() => reorder.mutate({ id: f.id, direction: "up" })}
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          disabled={idx === modFields.length - 1 || reorder.isPending}
+                          onClick={() => reorder.mutate({ id: f.id, direction: "down" })}
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => remove.mutate(f.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
