@@ -149,6 +149,7 @@ export const initiateGenericDriveUpload = createServerFn({ method: "POST" })
         },
         body: JSON.stringify({
           name: data.fileName,
+          mimeType: data.mimeType,
           parents: [targetFolderId],
         }),
       },
