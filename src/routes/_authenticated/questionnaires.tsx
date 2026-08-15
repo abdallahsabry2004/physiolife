@@ -11,6 +11,7 @@ import {
   UploadCloud,
   Image as ImageIcon,
   Printer,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -97,6 +98,54 @@ const getCleanQuestions = (qs: QuestionDraft[]) =>
     .map((q) => ({ ...q, options: q.options.filter((o) => o.label.trim() !== "") }))
     .filter((q) => q.text.trim() !== "" && q.options.length > 0);
 
+type QuestionnaireDocItem = {
+  type?: string;
+  webViewLink?: string;
+  driveFileId?: string;
+  name?: string;
+  url?: string;
+};
+
+type UploadedQuestionnaireFile = {
+  name: string;
+  url: string;
+  driveFileId?: string;
+};
+
+const getQuestionnaireFiles = (q: {
+  interpretation?: unknown;
+  scoring_formula?: string | null;
+  name?: string;
+}): UploadedQuestionnaireFile[] => {
+  const files: UploadedQuestionnaireFile[] = [];
+  if (Array.isArray(q.interpretation) && q.interpretation.length > 0) {
+    (q.interpretation as QuestionnaireDocItem[]).forEach((item, idx) => {
+      if (!item) return;
+      if (typeof item === "string" && (item as string).startsWith("http")) {
+        files.push({ name: `File ${idx + 1}`, url: item as string });
+      } else if (item.webViewLink || item.url) {
+        files.push({
+          name: item.name || `File ${idx + 1}`,
+          url: item.webViewLink || item.url || "#",
+          driveFileId: item.driveFileId,
+        });
+      }
+    });
+  }
+  if (
+    files.length === 0 &&
+    q.scoring_formula &&
+    typeof q.scoring_formula === "string" &&
+    q.scoring_formula.startsWith("http")
+  ) {
+    files.push({
+      name: q.name || "Questionnaire File",
+      url: q.scoring_formula,
+    });
+  }
+  return files;
+};
+
 function QuestionnairesPage() {
   const { canEditClinical, user, fullName } = useAuth();
   const qc = useQueryClient();
@@ -118,7 +167,7 @@ function QuestionnairesPage() {
   });
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [existingImages, setExistingImages] = useState<InterpretationBand[]>([]);
+  const [existingImages, setExistingImages] = useState<QuestionnaireDocItem[]>([]);
   const [deletedDriveIds, setDeletedDriveIds] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const initUploadFn = useServerFn(initiateGenericDriveUpload);
@@ -191,15 +240,11 @@ function QuestionnairesPage() {
       mdc: data.mdc === null ? "" : String(data.mdc),
     });
     if (data.scoring_method === "image") {
-      setExistingImages((data.interpretation as unknown as InterpretationBand[]) || []);
+      setExistingImages((data.interpretation as unknown as QuestionnaireDocItem[]) || []);
       setBands([]);
     } else {
       setExistingImages([]);
-      setBands(
-        parseBands(data.interpretation).length
-          ? parseBands(data.interpretation)
-          : [],
-      );
+      setBands(parseBands(data.interpretation).length ? parseBands(data.interpretation) : []);
     }
     const qs = [...(data.questionnaire_questions ?? [])].sort(
       (a, b) => a.sort_order - b.sort_order,
@@ -285,13 +330,21 @@ function QuestionnairesPage() {
 
       if (meta.scoring_method === "image") {
         setIsUploading(true);
-        const uploadedImages: any[] = [];
+        const uploadedImages: QuestionnaireDocItem[] = [];
         for (const file of imageFiles) {
           const res = await uploadQuestionnaireImage(file);
-          uploadedImages.push({ type: "image", webViewLink: res.webViewLink, driveFileId: res.driveFileId, name: file.name });
+          uploadedImages.push({
+            type: "image",
+            webViewLink: res.webViewLink,
+            driveFileId: res.driveFileId,
+            name: file.name,
+          });
         }
-        interpretationJson = [...existingImages, ...uploadedImages] as unknown as InterpretationBand[];
-        webViewLink = (interpretationJson as any[])?.[0]?.webViewLink || null;
+        interpretationJson = [
+          ...existingImages,
+          ...uploadedImages,
+        ] as unknown as InterpretationBand[];
+        webViewLink = (interpretationJson as QuestionnaireDocItem[])?.[0]?.webViewLink || null;
       }
 
       const cleanQuestions = meta.scoring_method === "image" ? [] : getCleanQuestions(questions);
@@ -500,8 +553,10 @@ function QuestionnairesPage() {
     mutationFn: async (id: string) => {
       const target = list.find((q) => q.id === id);
       if (target?.scoring_method === "image" && target.interpretation) {
-        const files = Array.isArray(target.interpretation) ? target.interpretation : [target.interpretation];
-        for (const file of files as any[]) {
+        const files = Array.isArray(target.interpretation)
+          ? (target.interpretation as QuestionnaireDocItem[])
+          : ([target.interpretation] as QuestionnaireDocItem[]);
+        for (const file of files) {
           if (file?.driveFileId) {
             try {
               await deleteDriveFn({ data: { driveFileId: file.driveFileId } });
@@ -593,38 +648,81 @@ function QuestionnairesPage() {
               </div>
               <div className="flex gap-2">
                 {q.scoring_method === "image" ? (
-                  Array.isArray(q.interpretation) && q.interpretation.length > 1 ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
+                  (() => {
+                    const files = getQuestionnaireFiles(q);
+                    if (files.length === 0) {
+                      return (
+                        <Button variant="outline" size="sm" disabled>
                           <Printer className="mr-2 h-4 w-4" /> Print / View
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {(q.interpretation as any[]).map((file, idx) => (
-                          <DropdownMenuItem key={idx} asChild>
-                            <a href={file.webViewLink} target="_blank" rel="noreferrer" className="w-full cursor-pointer">
-                              {file.name || `File ${idx + 1}`}
-                            </a>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : (
-                    <Button variant="outline" size="sm" asChild>
-                      <a
-                        href={
-                          (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
-                          q.scoring_formula ||
-                          "#"
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Printer className="mr-2 h-4 w-4" /> Print / View
-                      </a>
-                    </Button>
-                  )
+                      );
+                    }
+                    if (files.length === 1) {
+                      return (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Printer className="mr-2 h-4 w-4" /> Print / View
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1">
+                              Uploaded Document
+                            </div>
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={files[0].url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full flex items-center justify-between gap-2 cursor-pointer py-1.5"
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate text-sm font-medium">
+                                    {files[0].name}
+                                  </span>
+                                </div>
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              </a>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      );
+                    }
+                    return (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Printer className="mr-2 h-4 w-4" /> Print / View
+                            <Badge variant="secondary" className="ms-1.5 px-1.5 py-0 text-[10px]">
+                              {files.length}
+                            </Badge>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-72">
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1 flex items-center justify-between">
+                            <span>Uploaded Files ({files.length})</span>
+                          </div>
+                          {files.map((file, idx) => (
+                            <DropdownMenuItem key={idx} asChild>
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full flex items-center justify-between gap-2 cursor-pointer py-2"
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate text-sm font-medium">{file.name}</span>
+                                </div>
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              </a>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })()
                 ) : (
                   <Button variant="outline" size="sm" onClick={() => setViewId(q.id)}>
                     <ClipboardList className="mr-2 h-4 w-4" /> View
@@ -789,9 +887,17 @@ function QuestionnairesPage() {
 
                 {(existingImages.length > 0 || imageFiles.length > 0) && (
                   <div className="space-y-2">
-                    {existingImages.map((img: any, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 border rounded-md">
-                        <a href={img.webViewLink} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">
+                    {existingImages.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 border rounded-md"
+                      >
+                        <a
+                          href={img.webViewLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-primary hover:underline"
+                        >
                           View File {idx + 1}
                         </a>
                         <Button
@@ -811,8 +917,13 @@ function QuestionnairesPage() {
                       </div>
                     ))}
                     {imageFiles.map((f, idx) => (
-                      <div key={`new-${idx}`} className="flex items-center justify-between p-2 border rounded-md">
-                        <span className="text-sm">{f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      <div
+                        key={`new-${idx}`}
+                        className="flex items-center justify-between p-2 border rounded-md"
+                      >
+                        <span className="text-sm">
+                          {f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
                         <Button
                           type="button"
                           variant="ghost"
