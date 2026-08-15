@@ -113,6 +113,7 @@ function QuestionnairesPage() {
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<InterpretationBand[]>([]);
+  const [deletedDriveIds, setDeletedDriveIds] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const initUploadFn = useServerFn(initiateGenericDriveUpload);
   const uploadChunkFn = useServerFn(uploadDriveChunk);
@@ -154,6 +155,7 @@ function QuestionnairesPage() {
     setEditingId(null);
     setImageFiles([]);
     setExistingImages([]);
+    setDeletedDriveIds([]);
     setIsUploading(false);
   };
 
@@ -266,6 +268,14 @@ function QuestionnairesPage() {
     mutationFn: async (deleteIds?: { qIds: string[]; oIds: string[] }) => {
       let webViewLink = meta.scoring_method === "image" ? meta.scoring_formula : null;
       let interpretationJson = bands.filter((b) => b.label.trim() !== "");
+
+      for (const id of deletedDriveIds) {
+        try {
+          await deleteDriveFn({ data: { driveFileId: id } });
+        } catch (e) {
+          console.error("Failed to delete removed drive file", e);
+        }
+      }
 
       if (meta.scoring_method === "image") {
         setIsUploading(true);
@@ -484,8 +494,8 @@ function QuestionnairesPage() {
     mutationFn: async (id: string) => {
       const target = list.find((q) => q.id === id);
       if (target?.scoring_method === "image" && target.interpretation) {
-        const files = target.interpretation as any[];
-        for (const file of files) {
+        const files = Array.isArray(target.interpretation) ? target.interpretation : [target.interpretation];
+        for (const file of files as any[]) {
           if (file?.driveFileId) {
             try {
               await deleteDriveFn({ data: { driveFileId: file.driveFileId } });
@@ -768,7 +778,12 @@ function QuestionnairesPage() {
                           variant="ghost"
                           size="sm"
                           className="text-destructive h-8 w-8 p-0"
-                          onClick={() => setExistingImages(existingImages.filter((_, i) => i !== idx))}
+                          onClick={() => {
+                            if (img.driveFileId) {
+                              setDeletedDriveIds((prev) => [...prev, img.driveFileId]);
+                            }
+                            setExistingImages(existingImages.filter((_, i) => i !== idx));
+                          }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -802,7 +817,8 @@ function QuestionnairesPage() {
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     onChange={(e) => {
                       if (e.target.files?.length) {
-                        setImageFiles((prev) => [...prev, ...Array.from(e.target.files as FileList)]);
+                        const newFiles = Array.from(e.target.files);
+                        setImageFiles((prev) => [...prev, ...newFiles]);
                       }
                       e.target.value = "";
                     }}
