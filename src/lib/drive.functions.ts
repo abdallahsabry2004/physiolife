@@ -119,6 +119,53 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
     };
   });
 
+export const initiateGenericDriveUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { folderName: string; fileName: string; mimeType: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: account } = await supabase
+      .from("storage_accounts")
+      .select("id, root_folder_id")
+      .eq("is_active", true)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const auth = await getGoogleAuth();
+    const { token } = await auth.getAccessToken();
+
+    const rootId = account?.root_folder_id;
+    const targetFolderId = await ensureFolder(auth, data.folderName, rootId ?? undefined);
+
+    const initRes = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,size",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Upload-Content-Type": data.mimeType,
+        },
+        body: JSON.stringify({
+          name: data.fileName,
+          parents: [targetFolderId],
+        }),
+      },
+    );
+
+    if (!initRes.ok) {
+      throw new Error("Failed to initialize generic Google Drive upload.");
+    }
+
+    const uploadUrl = initRes.headers.get("Location");
+    if (!uploadUrl) {
+      throw new Error("Google didn't return an upload URL.");
+    }
+
+    return { uploadUrl };
+  });
+
 // 3. رفع الأجزاء (Chunks) للسيرفر
 export const uploadDriveChunk = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -153,6 +200,39 @@ export const uploadDriveChunk = createServerFn({ method: "POST" })
 
     const errText = await res.text();
     throw new Error(`Upload failed at Google: ${res.status} ${errText}`);
+  });
+
+export const makeDriveFilePublic = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { driveFileId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const auth = await getGoogleAuth();
+      const { token } = await auth.getAccessToken();
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}/permissions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          role: "reader",
+          type: "anyone",
+        }),
+      });
+      // also fetch webViewLink
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${data.driveFileId}?fields=webViewLink,id`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const fileData = await res.json();
+      return { ok: true, webViewLink: fileData.webViewLink };
+    } catch (e) {
+      console.error("Failed to make file public", e);
+      throw e;
+    }
   });
 
 // 4. حفظ بيانات الملف في قاعدة بيانات Supabase
