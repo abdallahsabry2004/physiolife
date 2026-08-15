@@ -35,9 +35,9 @@ export function UserPermissionsDialog({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<Record<PageKey, boolean>>({
-    dashboard: true,
-    billing: true,
-    analytics: true,
+    dashboard: false,
+    billing: false,
+    analytics: false,
   });
 
   const { data: perms } = useQuery({
@@ -55,7 +55,7 @@ export function UserPermissionsDialog({
 
   useEffect(() => {
     if (!perms) return;
-    const next: Record<PageKey, boolean> = { dashboard: true, billing: true, analytics: true };
+    const next: Record<PageKey, boolean> = { dashboard: false, billing: false, analytics: false };
     perms.forEach((p) => {
       if (RESTRICTED_PAGES.includes(p.page as PageKey)) {
         next[p.page as PageKey] = p.allowed;
