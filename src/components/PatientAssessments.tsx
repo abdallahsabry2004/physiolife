@@ -520,19 +520,21 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                     <Button
                       key={idx}
                       variant="outline"
-                      onClick={() => window.open(file.webViewLink, "_blank")}
-                      type="button"
+                      asChild
                     >
-                      <Printer className="mr-2 h-4 w-4" /> View File {idx + 1}
+                      <a href={file.webViewLink} target="_blank" rel="noreferrer">
+                        <Printer className="mr-2 h-4 w-4" /> View File {idx + 1}
+                      </a>
                     </Button>
                   ))}
                   {!(activeQ.interpretation as Record<string, string>[])?.length && activeQ.scoring_formula && (
                     <Button
                       variant="outline"
-                      onClick={() => window.open(activeQ.scoring_formula, "_blank")}
-                      type="button"
+                      asChild
                     >
-                      <Printer className="mr-2 h-4 w-4" /> View Link
+                      <a href={activeQ.scoring_formula} target="_blank" rel="noreferrer">
+                        <Printer className="mr-2 h-4 w-4" /> View Link
+                      </a>
                     </Button>
                   )}
                 </div>
