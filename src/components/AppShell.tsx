@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UserProfileModal } from "@/components/UserProfileModal";
 import {
@@ -41,17 +41,31 @@ const nav = [
 }[];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { fullName, roles, isAdmin, signOut, canViewPage } = useAuth();
+  const { fullName, roles, isAdmin, isTrainee, loading, signOut, canViewPage } = useAuth();
   const { t, lang, setLang } = useI18n();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  const items = nav.filter(
-    (item) =>
+  useEffect(() => {
+    if (!loading && isTrainee) {
+      const allowed = ["/patients", "/exercises", "/questionnaires"];
+      const isAllowed = allowed.some((p) => location.pathname.startsWith(p));
+      if (!isAllowed) {
+        void navigate({ to: "/patients" });
+      }
+    }
+  }, [loading, isTrainee, location.pathname, navigate]);
+
+  const items = nav.filter((item) => {
+    if (isTrainee) {
+      return item.to === "/patients" || item.to === "/exercises" || item.to === "/questionnaires";
+    }
+    return (
       (!("adminOnly" in item && item.adminOnly) || isAdmin) &&
-      (!("page" in item) || canViewPage(item.page as PageKey)),
-  );
+      (!("page" in item) || canViewPage(item.page as PageKey))
+    );
+  });
 
   const { data: unread = 0 } = useQuery({
     queryKey: ["notifications-unread"],
@@ -159,18 +173,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <img src={logo} alt="" width={28} height={28} className="h-7 w-7" />
           <span className="font-semibold">{t("app.name")}</span>
-          <Link
-            to="/notifications"
-            className="ms-auto relative"
-            aria-label={t("nav.notifications")}
-          >
-            <Bell className="h-5 w-5" />
-            {unread > 0 && (
-              <span className="absolute -end-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                {unread}
-              </span>
-            )}
-          </Link>
+          {!isTrainee && (
+            <Link
+              to="/notifications"
+              className="ms-auto relative"
+              aria-label={t("nav.notifications")}
+            >
+              <Bell className="h-5 w-5" />
+              {unread > 0 && (
+                <span className="absolute -end-1.5 -top-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  {unread}
+                </span>
+              )}
+            </Link>
+          )}
         </header>
 
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
