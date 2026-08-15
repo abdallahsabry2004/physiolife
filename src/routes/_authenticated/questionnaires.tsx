@@ -403,6 +403,9 @@ function QuestionnairesPage() {
       void qc.invalidateQueries({ queryKey: ["questionnaire-detail"] });
     },
     onError: (e: Error) => toast.error(e.message),
+    onSettled: () => {
+      setIsUploading(false);
+    },
   });
 
   const handlePreSaveCheck = async (e: React.FormEvent) => {
@@ -577,15 +580,19 @@ function QuestionnairesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      window.open(
-                        (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
-                          q.scoring_formula,
-                        "_blank",
-                      )
-                    }
+                    asChild
                   >
-                    <Printer className="mr-2 h-4 w-4" /> Print / View
+                    <a
+                      href={
+                        (q.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
+                        q.scoring_formula ||
+                        "#"
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Printer className="mr-2 h-4 w-4" /> Print / View
+                    </a>
                   </Button>
                 ) : (
                   <Button variant="outline" size="sm" onClick={() => setViewId(q.id)}>
@@ -757,6 +764,7 @@ function QuestionnairesPage() {
                           View File {idx + 1}
                         </a>
                         <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
                           className="text-destructive h-8 w-8 p-0"
@@ -770,6 +778,7 @@ function QuestionnairesPage() {
                       <div key={`new-${idx}`} className="flex items-center justify-between p-2 border rounded-md">
                         <span className="text-sm">{f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)</span>
                         <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
                           className="text-destructive h-8 w-8 p-0"
