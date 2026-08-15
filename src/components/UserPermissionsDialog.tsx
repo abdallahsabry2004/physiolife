@@ -26,10 +26,12 @@ export function UserPermissionsDialog({
   userId,
   userName,
   isSuperAdmin,
+  isTrainee,
 }: {
   userId: string;
   userName: string;
   isSuperAdmin: boolean;
+  isTrainee?: boolean;
 }) {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
@@ -105,9 +107,18 @@ export function UserPermissionsDialog({
               ? "المسؤول الأعلى لديه وصول كامل لجميع الصفحات."
               : "Super admins always have full access to every page."}
           </p>
+        ) : isTrainee ? (
+          <p className="rounded-lg border bg-muted/40 p-3 text-sm">
+            {lang === "ar"
+              ? "رتبة المتدرب (Trainee) تملك صلاحية عرض فقط لصفحات المرضى، مكتبة التمارين ومكتبة الاستبيانات."
+              : "Trainee accounts have view-only access to Patients, Exercise Library, and Questionnaires Library."}
+          </p>
         ) : isLoading ? (
-          <div className="flex justify-center p-6">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center gap-2 py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">
+              {lang === "ar" ? "جاري جلب حالة الصلاحيات..." : "Loading permissions..."}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
