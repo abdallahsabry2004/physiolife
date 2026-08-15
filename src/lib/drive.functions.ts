@@ -308,10 +308,13 @@ export const deletePatientFile = createServerFn({ method: "POST" })
       try {
         const auth = await getGoogleAuth();
         const { token } = await auth.getAccessToken();
-        await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!res.ok) {
+           console.error("Delete failed:", await res.text());
+        }
       } catch (e) {
         console.error("Drive delete failed", e);
       }
@@ -328,10 +331,14 @@ export const deleteDriveFile = createServerFn({ method: "POST" })
     try {
       const auth = await getGoogleAuth();
       const { token } = await auth.getAccessToken();
-      await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}`, {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) {
+        console.error("Delete failed:", await res.text());
+        throw new Error("Drive API returned " + res.status);
+      }
       return { ok: true };
     } catch (e) {
       console.error("Drive delete failed", e);
