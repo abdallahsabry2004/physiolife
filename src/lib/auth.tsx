@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "super_admin" | "therapist" | "receptionist" | "assistant";
+export type AppRole = "super_admin" | "therapist" | "receptionist" | "assistant" | "trainee";
 
 // إعادة تعريف المفاتيح اللازمة لعمل AppShell و PageGuard
 export type PageKey = "dashboard" | "billing" | "analytics";
@@ -22,9 +22,10 @@ type AuthState = {
   fullName: string;
   loading: boolean;
   isAdmin: boolean;
+  isTrainee: boolean;
   canEditClinical: boolean;
   canBill: boolean;
-  canViewPage: (page: PageKey) => boolean; // الدالة المفقودة التي تسببت في توقف الموقع
+  canViewPage: (page: PageKey) => boolean;
   signOut: () => Promise<void>;
 };
 
@@ -52,45 +53,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      
+
       const [
-        { data: roleRows }, 
+        { data: roleRows },
         { data: profile },
-        { data: perms } // هترجع Array مش Object واحد
+        { data: perms }, // هترجع Array مش Object واحد
       ] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", nextSession.user.id),
         supabase.from("profiles").select("full_name").eq("id", nextSession.user.id).maybeSingle(),
         // تم تصحيح اسم الجدول وإزالة maybeSingle
-        supabase.from("user_page_permissions").select("page, allowed").eq("user_id", nextSession.user.id),
+        supabase
+          .from("user_page_permissions")
+          .select("page, allowed")
+          .eq("user_id", nextSession.user.id),
       ]);
-      
+
       if (!active) return;
-      
-      const userRoles = (roleRows ?? []).map((r) => r.role as AppRole);
+
+      const isTraineeFromPerms = (perms ?? []).some((p) => p.page === "trainee" && p.allowed);
+      let userRoles = (roleRows ?? []).map((r) => r.role as AppRole);
+      if (isTraineeFromPerms) {
+        userRoles = ["trainee"];
+      }
       setRoles(userRoles);
       setFullName(profile?.full_name || nextSession.user.email || "");
-      
+
       // تحويل الـ Array اللي راجعة من الداتا بيز لـ Object يطابق الـ UserPermissions type
       if (perms && perms.length > 0) {
         const permissionsObj = {
-           can_access_billing: false,
-           can_access_dashboard: false,
-           can_access_analytics: false
+          can_access_billing: false,
+          can_access_dashboard: false,
+          can_access_analytics: false,
         };
         perms.forEach((p) => {
-           if (p.page === "dashboard") permissionsObj.can_access_dashboard = p.allowed;
-           if (p.page === "billing") permissionsObj.can_access_billing = p.allowed;
-           if (p.page === "analytics") permissionsObj.can_access_analytics = p.allowed;
+          if (p.page === "dashboard") permissionsObj.can_access_dashboard = p.allowed;
+          if (p.page === "billing") permissionsObj.can_access_billing = p.allowed;
+          if (p.page === "analytics") permissionsObj.can_access_analytics = p.allowed;
         });
         setPermissions(permissionsObj);
       } else {
         setPermissions({
-           can_access_billing: false,
-           can_access_dashboard: false,
-           can_access_analytics: false
+          can_access_billing: false,
+          can_access_dashboard: false,
+          can_access_analytics: false,
         });
       }
-      
+
       setLoading(false);
     };
 
@@ -107,12 +115,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) return;
-    
+
     const isSessionOnly = sessionStorage.getItem("pl-session-only") === "1";
     if (!isSessionOnly) return;
 
     let timer: ReturnType<typeof setTimeout>;
-    
+
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -123,9 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const events = ["mousedown", "keydown", "touchstart", "scroll"] as const;
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    
+
     reset();
-    
+
     return () => {
       clearTimeout(timer);
       events.forEach((e) => window.removeEventListener(e, reset));
@@ -133,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const isSuperAdmin = roles.includes("super_admin");
+  const isTrainee = roles.includes("trainee");
 
   const value: AuthState = {
     user: session?.user ?? null,
@@ -142,15 +151,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName,
     loading,
     isAdmin: isSuperAdmin,
-    canEditClinical: isSuperAdmin || roles.includes("therapist"),
-    canBill: isSuperAdmin || (permissions?.can_access_billing ?? false), 
+    isTrainee,
+    canEditClinical: !isTrainee && (isSuperAdmin || roles.includes("therapist")),
+    canBill: !isTrainee && (isSuperAdmin || (permissions?.can_access_billing ?? false)),
     canViewPage: (page: PageKey) => {
-       // الـ Super Admin له صلاحية مطلقة، وباقي الموظفين حسب الإعدادات
-       if (isSuperAdmin) return true;
-       if (page === "dashboard") return permissions?.can_access_dashboard ?? false;
-       if (page === "billing") return permissions?.can_access_billing ?? false;
-       if (page === "analytics") return permissions?.can_access_analytics ?? false;
-       return false;
+      // المتدرب لا يملك وصول لأي من هذه الصفحات
+      if (isTrainee) return false;
+      // الـ Super Admin له صلاحية مطلقة، وباقي الموظفين حسب الإعدادات
+      if (isSuperAdmin) return true;
+      if (page === "dashboard") return permissions?.can_access_dashboard ?? false;
+      if (page === "billing") return permissions?.can_access_billing ?? false;
+      if (page === "analytics") return permissions?.can_access_analytics ?? false;
+      return false;
     },
     signOut: async () => {
       sessionStorage.removeItem("pl-session-only");
