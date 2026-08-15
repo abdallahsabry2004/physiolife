@@ -515,19 +515,27 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                 <p className="text-sm text-muted-foreground">
                   This is an image-based questionnaire.
                 </p>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    window.open(
-                      (activeQ.interpretation as Record<string, string>[])?.[0]?.webViewLink ||
-                        activeQ.scoring_formula,
-                      "_blank",
-                    )
-                  }
-                  type="button"
-                >
-                  <Printer className="mr-2 h-4 w-4" /> Print / View Image
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {(activeQ.interpretation as Record<string, string>[])?.map((file, idx) => (
+                    <Button
+                      key={idx}
+                      variant="outline"
+                      onClick={() => window.open(file.webViewLink, "_blank")}
+                      type="button"
+                    >
+                      <Printer className="mr-2 h-4 w-4" /> View File {idx + 1}
+                    </Button>
+                  ))}
+                  {!(activeQ.interpretation as Record<string, string>[])?.length && activeQ.scoring_formula && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(activeQ.scoring_formula, "_blank")}
+                      type="button"
+                    >
+                      <Printer className="mr-2 h-4 w-4" /> View Link
+                    </Button>
+                  )}
+                </div>
                 <div className="space-y-2 mt-4">
                   <Label>Patient Result</Label>
                   <Input
