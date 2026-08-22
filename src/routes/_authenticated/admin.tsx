@@ -37,6 +37,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logo from "@/assets/physio-life-logo.png";
 import { UserPermissionsDialog } from "@/components/UserPermissionsDialog";
+import { ClinicSettingsCard } from "@/components/ClinicSettingsCard";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -427,6 +428,7 @@ function AdminPage() {
           ))}
         </CardContent>
       </Card>
+      <ClinicSettingsCard />
 
       <Card className="print:hidden">
         <CardHeader>
