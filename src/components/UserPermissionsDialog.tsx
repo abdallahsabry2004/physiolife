@@ -20,6 +20,7 @@ const PAGE_LABELS: Record<PageKey, { en: string; ar: string }> = {
   dashboard: { en: "Dashboard", ar: "الرئيسية" },
   billing: { en: "Billing", ar: "الفواتير" },
   analytics: { en: "Analytics", ar: "التحليلات" },
+  financial_reports: { en: "Financial Reports", ar: "التقارير المالية" },
 };
 
 export function UserPermissionsDialog({
@@ -41,6 +42,7 @@ export function UserPermissionsDialog({
     dashboard: false,
     billing: false,
     analytics: false,
+    financial_reports: false,
   });
 
   const { data: perms, isLoading } = useQuery({
@@ -58,7 +60,12 @@ export function UserPermissionsDialog({
 
   useEffect(() => {
     if (!perms) return;
-    const next: Record<PageKey, boolean> = { dashboard: false, billing: false, analytics: false };
+    const next: Record<PageKey, boolean> = {
+      dashboard: false,
+      billing: false,
+      analytics: false,
+      financial_reports: false,
+    };
     perms.forEach((p) => {
       if (RESTRICTED_PAGES.includes(p.page as PageKey)) {
         next[p.page as PageKey] = p.allowed;
