@@ -245,6 +245,76 @@ export type Database = {
         };
         Relationships: [];
       };
+
+      clinic_departments: {
+        Row: {
+          id: string;
+          name: string;
+          is_active: boolean | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          is_active?: boolean | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          is_active?: boolean | null;
+          created_at?: string | null;
+        };
+        Relationships: [];
+      };
+      clinic_partnerships: {
+        Row: {
+          id: string;
+          name: string;
+          type: string;
+          value: number | null;
+          fraction_numerator: number | null;
+          fraction_denominator: number | null;
+          is_active: boolean | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          type: string;
+          value?: number | null;
+          fraction_numerator?: number | null;
+          fraction_denominator?: number | null;
+          is_active?: boolean | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          type?: string;
+          value?: number | null;
+          fraction_numerator?: number | null;
+          fraction_denominator?: number | null;
+          is_active?: boolean | null;
+          created_at?: string | null;
+        };
+        Relationships: [];
+      };
+      clinic_settings: {
+        Row: {
+          key: string;
+          value: Json;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+        };
+        Relationships: [];
+      };
       invoices: {
         Row: {
           created_at: string;
@@ -689,8 +759,9 @@ export type Database = {
           occupation: string | null;
           phone: string | null;
           phone_alt: string | null;
-          primary_therapist_id: string | null;
+          primary_;
           referral_source: string | null;
+          referral_phone: string | null;
           status: string;
           updated_at: string;
         };
@@ -713,8 +784,9 @@ export type Database = {
           occupation?: string | null;
           phone?: string | null;
           phone_alt?: string | null;
-          primary_therapist_id?: string | null;
+          primary_;
           referral_source?: string | null;
+          referral_phone?: string | null;
           status?: string;
           updated_at?: string;
         };
@@ -737,8 +809,9 @@ export type Database = {
           occupation?: string | null;
           phone?: string | null;
           phone_alt?: string | null;
-          primary_therapist_id?: string | null;
+          primary_;
           referral_source?: string | null;
+          referral_phone?: string | null;
           status?: string;
           updated_at?: string;
         };
@@ -1014,7 +1087,6 @@ export type Database = {
           session_number: number;
           signature: string | null;
           subjective: string | null;
-          therapist_id: string | null;
           updated_at: string;
         };
         Insert: {
@@ -1036,7 +1108,6 @@ export type Database = {
           session_number?: number;
           signature?: string | null;
           subjective?: string | null;
-          therapist_id?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -1058,7 +1129,6 @@ export type Database = {
           session_number?: number;
           signature?: string | null;
           subjective?: string | null;
-          therapist_id?: string | null;
           updated_at?: string;
         };
         Relationships: [
