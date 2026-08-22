@@ -62,7 +62,10 @@ function NotificationsPage() {
           .neq("status", "paid")
           .limit(20),
         supabase.from("patients").select("id, full_name").eq("status", "active").limit(200),
-        supabase.from("treatment_sessions").select("patient_id, session_date").gte("session_date", cutoff),
+        supabase
+          .from("treatment_sessions")
+          .select("patient_id, session_date")
+          .gte("session_date", cutoff),
       ]);
       const recent = new Set((sessions ?? []).map((s) => s.patient_id));
       return {
@@ -97,7 +100,10 @@ function NotificationsPage() {
 
   const markRead = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from("notifications").update({ is_read: true }).in("id", ids);
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .in("id", ids);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -132,11 +138,21 @@ function NotificationsPage() {
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="n-title">{t("notif.titleField")}</Label>
-            <Input id="n-title" value={title} maxLength={140} onChange={(e) => setTitle(e.target.value)} />
+            <Input
+              id="n-title"
+              value={title}
+              maxLength={140}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="n-due">{t("notif.dueField")}</Label>
-            <Input id="n-due" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+            <Input
+              id="n-due"
+              type="date"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-3">
             <Label htmlFor="n-body">{t("notif.bodyField")}</Label>
@@ -170,7 +186,9 @@ function NotificationsPage() {
               </p>
               {n.body && <p className="text-xs text-muted-foreground">{n.body}</p>}
               <p className="text-xs text-muted-foreground">
-                {n.due_at ? new Date(n.due_at).toLocaleDateString() : new Date(n.created_at).toLocaleString()}
+                {n.due_at
+                  ? new Date(n.due_at).toLocaleDateString("en-GB")
+                  : new Date(n.created_at).toLocaleString("en-GB")}
               </p>
             </div>
             {!n.is_read && (
@@ -192,7 +210,8 @@ function NotificationsPage() {
           {(alerts?.unpaid ?? []).map((i) => (
             <div key={i.id} className="flex justify-between rounded-lg border p-3">
               <span>
-                {(i.patients as { full_name: string } | null)?.full_name ?? "—"} · {i.invoice_number}
+                {(i.patients as { full_name: string } | null)?.full_name ?? "—"} ·{" "}
+                {i.invoice_number}
               </span>
               <span className="text-muted-foreground">
                 {t("notif.unpaid")} · {Number(i.total).toFixed(2)}
