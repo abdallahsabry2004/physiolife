@@ -13,6 +13,7 @@ import {
   X,
   Bell,
   BarChart3,
+  Wallet,
   Languages,
   ClipboardList,
 } from "lucide-react";
@@ -31,6 +32,12 @@ const nav = [
   { to: "/billing", label: "nav.billing", icon: Receipt, page: "billing" },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
   { to: "/analytics", label: "nav.analytics", icon: BarChart3, page: "analytics" },
+  {
+    to: "/financial-reports",
+    label: "nav.financialReports",
+    icon: Wallet,
+    page: "financial_reports",
+  },
   { to: "/admin", label: "nav.admin", icon: ShieldCheck, adminOnly: true },
 ] as const satisfies readonly {
   to: string;
