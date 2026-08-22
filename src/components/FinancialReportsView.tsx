@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Printer, Calendar as CalendarIcon, ArrowRight, ArrowLeft } from "lucide-react";
+import logo from "@/assets/physio-life-logo.png";
 import {
   Select,
   SelectContent,
@@ -259,7 +260,8 @@ function StaffReport({
   );
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6 print:hidden">
       <div className="flex items-center justify-between no-print">
         <Button variant="ghost" onClick={onBack}>
           {lang === "ar" ? (
@@ -275,12 +277,7 @@ function StaffReport({
         </Button>
       </div>
 
-      <div className="print-header hidden print:block text-center mb-8">
-        <h1 className="text-2xl font-bold">
-          {lang === "ar" ? "تقرير معاملات الطبيب" : "Doctor Transactions Report"}
-        </h1>
-        <p className="text-xl mt-2">{userName}</p>
-      </div>
+      
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 no-print">
         <div>
@@ -380,14 +377,14 @@ function StaffReport({
         </Card>
       </div>
 
-      {deptStats && Object.keys(deptStats).length > 0 && (
+      {(deptStats && Object.keys(deptStats || {}).length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle>{lang === "ar" ? "تفاصيل الأقسام" : "Department Details"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {Object.entries(deptStats).map(([dept, stats]) => (
+              {Object.entries(deptStats || {}).map(([dept, stats]) => (
                 <div
                   key={dept}
                   className="flex justify-between items-center border-b pb-2 last:border-0"
@@ -486,6 +483,130 @@ function StaffReport({
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+
+      {/* Print Only Layout */}
+      <div className="hidden print:block w-full bg-white text-black" dir="ltr">
+        <div className="border-b-2 border-[#0f766e] pb-6 mb-6 flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
+            <div>
+              <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
+              <p className="text-sm font-medium text-gray-600 mb-2">Physical Therapy & Rehabilitation</p>
+              <div className="text-xs text-gray-600 leading-relaxed font-semibold">
+                <p dir="rtl">
+                  📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني
+                </p>
+                <p dir="ltr" className="mt-1">
+                  📞 للتواصل والحجز: 01050359331
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <h3 className="text-2xl font-bold text-gray-800 tracking-wider uppercase">{userName}</h3>
+            <p className="text-gray-500 font-medium mt-1">Financial Report</p>
+            <p className="text-gray-500 font-medium mt-2">
+              Printed: {new Date().toLocaleDateString("en-GB")} {new Date().toLocaleTimeString("en-US")}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-4 mb-8">
+          <div className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-500 font-semibold mb-1">Total Cases</p>
+            <p className="text-2xl font-bold text-gray-800">{totalCases}</p>
+          </div>
+          <div className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-500 font-semibold mb-1">Total Revenue</p>
+            <p className="text-2xl font-bold text-blue-600">EGP {totalRevenue.toLocaleString()}</p>
+          </div>
+          <div className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-500 font-semibold mb-1">Total Paid</p>
+            <p className="text-2xl font-bold text-green-600">EGP {totalPaid.toLocaleString()}</p>
+          </div>
+          {showStaffShare && (
+            <div className="border border-gray-200 p-4 rounded-lg bg-gray-50">
+              <p className="text-sm text-gray-500 font-semibold mb-1">Estimated Share</p>
+              <p className="text-2xl font-bold text-[#0f766e]">EGP {Math.round(totalStaffShare).toLocaleString()}</p>
+            </div>
+          )}
+        </div>
+
+        {Object.keys(deptStats || {}).length > 0 && (
+          <div className="mb-8">
+            <h4 className="font-bold text-lg mb-4 text-[#0f766e]">Department Breakdown</h4>
+            <table className="w-full text-left text-sm border-collapse mb-4">
+              <thead>
+                <tr className="border-b-2 border-gray-300">
+                  <th className="py-2 px-2">Department</th>
+                  <th className="py-2 px-2 text-right">Cases</th>
+                  <th className="py-2 px-2 text-right">Revenue</th>
+                  <th className="py-2 px-2 text-right">Paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(deptStats || {}).map(([dept, data]) => (
+                  <tr key={dept} className="border-b border-gray-100">
+                    <td className="py-2 px-2 font-medium">{dept}</td>
+                    <td className="py-2 px-2 text-right">{data.cases}</td>
+                    <td className="py-2 px-2 text-right text-blue-600">EGP {data.revenue.toLocaleString()}</td>
+                    <td className="py-2 px-2 text-right text-green-600">EGP {data.paid.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div>
+          <h4 className="font-bold text-lg mb-4 text-[#0f766e]">Transactions Details</h4>
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="border-b-2 border-[#0f766e]">
+                <th className="py-3 px-2 text-gray-700 font-bold">Date</th>
+                <th className="py-3 px-2 text-gray-700 font-bold">Patient</th>
+                <th className="py-3 px-2 text-gray-700 font-bold">Department</th>
+                <th className="py-3 px-2 text-right text-gray-700 font-bold">Total</th>
+                <th className="py-3 px-2 text-right text-gray-700 font-bold">Paid</th>
+                <th className="py-3 px-2 text-right text-gray-700 font-bold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices?.map((inv) => {
+                const { paidAmount, remaining } = getInvoiceStats(inv);
+                return (
+                  <tr key={inv.id} className="border-b border-gray-100">
+                    <td className="py-3 px-2 text-gray-600 font-medium whitespace-nowrap">
+                      {new Date(inv.issue_date).toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="py-3 px-2 font-bold text-gray-800">
+                      {/* @ts-ignore */}
+                      {inv.patients?.full_name}
+                    </td>
+                    <td className="py-3 px-2 text-gray-700">
+                      {/* @ts-ignore */}
+                      {inv.clinic_departments?.name || "-"}
+                    </td>
+                    <td className="py-3 px-2 text-right text-gray-700 font-semibold">EGP {Number(inv.total || 0).toLocaleString()}</td>
+                    <td className="py-3 px-2 text-right text-green-600 font-bold">EGP {paidAmount.toLocaleString()}</td>
+                    <td className="py-3 px-2 text-right">
+                      {remaining <= 0 ? (
+                        <span className="text-green-600 font-bold">Paid</span>
+                      ) : paidAmount > 0 ? (
+                        <span className="text-yellow-600 font-bold">Partial</span>
+                      ) : (
+                        <span className="text-red-600 font-bold">Unpaid</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+
   );
 }
