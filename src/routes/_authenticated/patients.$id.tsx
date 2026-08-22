@@ -142,6 +142,7 @@ function PatientDetail() {
         phone: editForm.phone || null,
         diagnosis: editForm.diagnosis || null,
         referral_source: editForm.referral_source || null,
+        referral_phone: editForm.referral_phone || null,
         occupation: editForm.occupation || null,
         address: editForm.address || null,
       };
@@ -315,6 +316,7 @@ function PatientDetail() {
         phone: patient.phone || "",
         diagnosis: patient.diagnosis || "",
         referral_source: patient.referral_source || "",
+        referral_phone: patient.referral_phone || "",
         occupation: patient.occupation || "",
         address: patient.address || "",
       });
@@ -648,6 +650,15 @@ function PatientDetail() {
                   onChange={(e) => setEditForm({ ...editForm, referral_source: e.target.value })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Referral phone number</Label>
+                <Input
+                  value={editForm.referral_phone}
+                  onChange={(e) => setEditForm({ ...editForm, referral_phone: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Address</Label>
                 <Input
