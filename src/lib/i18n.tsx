@@ -21,6 +21,7 @@ const dict = {
   "nav.billing": { en: "Billing", ar: "الفواتير" },
   "nav.notifications": { en: "Notifications", ar: "التنبيهات" },
   "nav.analytics": { en: "Analytics", ar: "التحليلات" },
+  "nav.financialReports": { en: "Financial Reports", ar: "التقارير المالية" },
   "nav.admin": { en: "Administration", ar: "الإدارة" },
   "shell.signOut": { en: "Sign out", ar: "تسجيل الخروج" },
   "shell.staff": { en: "Staff member", ar: "عضو فريق" },
@@ -78,7 +79,10 @@ const dict = {
   "common.save": { en: "Save", ar: "حفظ" },
 
   // per-user page permissions
-  "perm.denied": { en: "You don't have access to this page.", ar: "لا تملك صلاحية الوصول لهذه الصفحة." },
+  "perm.denied": {
+    en: "You don't have access to this page.",
+    ar: "لا تملك صلاحية الوصول لهذه الصفحة.",
+  },
   "perm.deniedHint": {
     en: "Ask a super admin to grant you access from Administration.",
     ar: "اطلب من المسؤول الأعلى منحك الصلاحية من صفحة الإدارة.",
