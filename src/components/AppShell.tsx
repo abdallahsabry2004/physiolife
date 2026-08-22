@@ -23,6 +23,7 @@ import { useI18n, type TKey } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nav = [
   { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard, page: "dashboard" },
@@ -111,7 +112,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto space-y-1 p-3">
+        <ScrollArea className="flex-1 px-3 py-3">
+          <nav className="flex flex-col space-y-1">
           {items.map((item) => {
             const active = location.pathname.startsWith(item.to);
             return (
@@ -136,7 +138,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
-        </nav>
+          </nav>
+        </ScrollArea>
 
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center justify-between mb-3">
