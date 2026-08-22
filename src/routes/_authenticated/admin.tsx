@@ -265,12 +265,12 @@ function AdminPage() {
           ? JSON.parse(selectedLogDetails.details)
           : selectedLogDetails.details;
 
-      if (Object.keys(parsedDetails).length === 0)
+      if (Object.keys(parsedDetails || {}).length === 0)
         return <p className="text-muted-foreground">No extra details available.</p>;
 
       return (
         <div className="space-y-2 mt-4 bg-muted/30 p-4 rounded-md border">
-          {Object.entries(parsedDetails).map(([key, value]) => (
+          {Object.entries(parsedDetails || {}).map(([key, value]) => (
             <div
               key={key}
               className="grid grid-cols-3 gap-2 border-b border-border/50 pb-2 last:border-0 last:pb-0"
