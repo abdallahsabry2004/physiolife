@@ -5,7 +5,12 @@ import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { deletePatientFile, initiateDriveUpload, uploadDriveChunk, saveFileRecord } from "@/lib/drive.functions";
+import {
+  deletePatientFile,
+  initiateDriveUpload,
+  uploadDriveChunk,
+  saveFileRecord,
+} from "@/lib/drive.functions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,15 +97,15 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const uploadMutation = useMutation({
     mutationFn: async (fileList: File[]) => {
       // السر السحري: استخدام 256 كيلوبايت (الحد الأدنى لجوجل) عشان الشريط يبقى Smooth جداً
-      const CHUNK_SIZE = 262144; 
+      const CHUNK_SIZE = 262144;
 
       for (const file of fileList) {
         if (file.size === 0) throw new Error(`File ${file.name} is empty.`);
 
         // 1. طلب الرابط المؤقت من السيرفر
         const { uploadUrl, storageAccountId } = await initUpload({
-          data: { 
-            patientId, 
+          data: {
+            patientId,
             category,
             fileName: file.name,
             mimeType: file.type || "application/octet-stream",
@@ -117,7 +122,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const chunk = file.slice(start, end);
           const base64 = await toBase64(chunk);
-          
+
           const startTime = Date.now();
 
           // إرسال القطعة للسيرفر بتاعنا (اللي بدوره هيبعتها لجوجل)
@@ -172,7 +177,8 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             mimeType: file.type || "application/octet-stream",
             size: Number(driveData.size || file.size),
             driveFileId: driveData.id,
-            webViewLink: driveData.webViewLink || `https://drive.google.com/file/d/${driveData.id}/view`,
+            webViewLink:
+              driveData.webViewLink || `https://drive.google.com/file/d/${driveData.id}/view`,
             storageAccountId: storageAccountId,
           },
         });
@@ -294,7 +300,7 @@ export function PatientFiles({ patientId }: { patientId: string }) {
           <div className="min-w-0">
             <p className="truncate font-medium">{f.file_name}</p>
             <p className="text-xs text-muted-foreground">
-              {new Date(f.created_at).toLocaleDateString()}
+              {new Date(f.created_at).toLocaleDateString("en-GB")}
               {f.size_bytes ? ` · ${formatBytes(f.size_bytes)}` : ""}
             </p>
           </div>
