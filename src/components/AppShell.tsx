@@ -111,7 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 overflow-y-auto space-y-1 p-3">
           {items.map((item) => {
             const active = location.pathname.startsWith(item.to);
             return (
