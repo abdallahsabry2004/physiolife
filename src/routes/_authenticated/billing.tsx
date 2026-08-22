@@ -1,3 +1,4 @@
+import { TodayTransactionsTab } from "@/components/TodayTransactionsTab";
 import { PageGuard } from "@/components/PageGuard";
 import { format } from "date-fns";
 import { createFileRoute } from "@tanstack/react-router";
@@ -18,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { logActivityAsync } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +46,7 @@ import logo from "@/assets/physio-life-logo.png";
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({
     meta: [
-      { title: "Billing & Payments — Physio Life EMR" },
+      { title: lang === "ar" ? "الفواتير والمدفوعات — سجلات فيزيو لايف" : "Billing & Payments — Physio Life EMR" },
       {
         name: "description",
         content:
@@ -60,6 +62,7 @@ export const Route = createFileRoute("/_authenticated/billing")({
 });
 
 function BillingPage() {
+  const { lang } = useI18n();
   const { user, canBill, fullName } = useAuth();
   const qc = useQueryClient();
 
@@ -87,6 +90,8 @@ function BillingPage() {
 
   const [form, setForm] = useState({
     patient_id: "",
+    department_id: "none",
+    therapist_id: "none",
     description: "",
     sessions_count: "",
     subtotal: "",
@@ -110,6 +115,50 @@ function BillingPage() {
     }, 400);
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  const { data: settings } = useQuery({
+    queryKey: ["clinic_settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clinic_settings").select("*");
+      if (error) throw error;
+      const parsed = {};
+      data.forEach((d) => {
+        parsed[d.key] = d.value;
+      });
+      return parsed;
+    },
+  });
+
+  const { data: departments } = useQuery({
+    queryKey: ["clinic_departments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_departments")
+        .select("*")
+        .order("created_at");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: staffList } = useQuery({
+    queryKey: ["financial_staff_list"],
+    queryFn: async () => {
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", ["super_admin", "therapist", "assistant"]);
+      if (rolesError) throw rolesError;
+      if (!roles || roles.length === 0) return [];
+      const userIds = roles.map((r) => r.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", userIds);
+      if (profilesError) throw profilesError;
+      return profiles || [];
+    },
+  });
 
   const { data: patients = [] } = useQuery({
     queryKey: ["patients-min"],
@@ -229,13 +278,17 @@ function BillingPage() {
       .channel("realtime-billing")
       .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => {
         void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+        void qc.invalidateQueries({ queryKey: ["today_invoices"] });
         void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+        void qc.invalidateQueries({ queryKey: ["financial_reports"] });
         void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => {
         void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
         void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+        void qc.invalidateQueries({ queryKey: ["today_invoices"] });
         void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+        void qc.invalidateQueries({ queryKey: ["financial_reports"] });
         void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       })
       .subscribe();
@@ -253,6 +306,8 @@ function BillingPage() {
 
       const { error } = await supabase.from("invoices").insert({
         patient_id: form.patient_id,
+        department_id: form.department_id !== "none" ? form.department_id : null,
+        therapist_id: form.therapist_id !== "none" ? form.therapist_id : null,
         description: form.description || null,
         sessions_count: form.sessions_count ? Number(form.sessions_count) : null,
         subtotal,
@@ -274,13 +329,23 @@ function BillingPage() {
       });
     },
     onSuccess: () => {
-      toast.success("Invoice created successfully");
+      toast.success(lang === "ar" ? "تم إنشاء الفاتورة بنجاح" : "Invoice created successfully");
       setOpenInvoiceModal(false);
-      setForm({ patient_id: "", description: "", sessions_count: "", subtotal: "", discount: "" });
+      setForm({
+        patient_id: "",
+        department_id: "none",
+        therapist_id: "none",
+        description: "",
+        sessions_count: "",
+        subtotal: "",
+        discount: "",
+      });
 
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["today_invoices"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+      void qc.invalidateQueries({ queryKey: ["financial_reports"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -308,6 +373,12 @@ function BillingPage() {
           .update({ status: "paid" })
           .eq("id", invoice.id);
         if (upErr) throw upErr;
+      } else if (amountPaid < payModal.remaining) {
+        const { error: upErr } = await supabase
+          .from("invoices")
+          .update({ status: "partial" })
+          .eq("id", invoice.id);
+        if (upErr) throw upErr;
       }
 
       const patientName =
@@ -326,9 +397,11 @@ function BillingPage() {
       setPayModal({ open: false, invoice: null, amountToPay: "", remaining: 0, type: "full" });
 
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["today_invoices"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+      void qc.invalidateQueries({ queryKey: ["financial_reports"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -362,9 +435,11 @@ function BillingPage() {
       setDeleteInvoiceModal({ open: false, invoice: null, password: "" });
 
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["today_invoices"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+      void qc.invalidateQueries({ queryKey: ["financial_reports"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -395,9 +470,11 @@ function BillingPage() {
       toast.success("Payment deleted. Invoice status reverted to unpaid.");
 
       void qc.invalidateQueries({ queryKey: ["invoices_paginated"] });
+      void qc.invalidateQueries({ queryKey: ["today_invoices"] });
       void qc.invalidateQueries({ queryKey: ["payments_paginated"] });
       void qc.invalidateQueries({ queryKey: ["total_outstanding"] });
       void qc.invalidateQueries({ queryKey: ["patient_billing_history"] });
+      void qc.invalidateQueries({ queryKey: ["financial_reports"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -475,10 +552,8 @@ function BillingPage() {
               <div className="flex items-center gap-4">
                 <img src={logo} alt="Physio Life" className="h-[90px] w-[90px] object-contain" />
                 <div>
-                  <h2 className="text-3xl font-bold text-[#0f766e]">Physio Life PT Center</h2>
-                  <p className="text-sm font-medium text-gray-600 mb-2">
-                    Physical Therapy & Rehabilitation
-                  </p>
+                  <h2 className="text-3xl font-bold text-[#0f766e]">{lang === "ar" ? "مركز فيزيو لايف للعلاج الطبيعي" : "Physio Life PT Center"}</h2>
+                  <p className="text-sm font-medium text-gray-600 mb-2">{lang === "ar" ? "العلاج الطبيعي والتأهيل" : "Physical Therapy & Rehabilitation"}</p>
                   <div className="text-xs text-gray-600 leading-relaxed font-semibold">
                     <p dir="rtl">
                       📍 قنا - أمام المستشفى العام - بجوار حلواني شوكلتير - أعلى بنك دبي الوطني
@@ -489,7 +564,7 @@ function BillingPage() {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-end">
                 <h3 className="text-2xl font-bold text-gray-800 tracking-wider">
                   {printData.type === "invoice" && "INVOICE STATEMENT"}
                   {printData.type === "payment" && "PAYMENT RECEIPT"}
@@ -501,7 +576,12 @@ function BillingPage() {
                   </p>
                 )}
                 <p className="text-gray-500 font-medium">
-                  Date: {format(new Date(), "dd/MM/yyyy hh:mm a")}
+                  Date:{" "}
+                  {printData.type === "history"
+                    ? format(new Date(), "dd/MM/yyyy hh:mm a")
+                    : printData.data.created_at
+                      ? format(new Date(printData.data.created_at), "dd/MM/yyyy hh:mm a")
+                      : format(new Date(), "dd/MM/yyyy hh:mm a")}
                 </p>
               </div>
             </div>
@@ -509,7 +589,7 @@ function BillingPage() {
             <div className="mt-8 space-y-6">
               <div className="flex justify-between border-b border-gray-200 pb-4">
                 <div>
-                  <p className="text-sm text-gray-500 uppercase font-semibold">Patient Details</p>
+                  <p className="text-sm text-gray-500 uppercase font-semibold">{lang === "ar" ? "تفاصيل المريض" : "Patient Details"}</p>
                   <p className="text-xl font-bold mt-1 text-black">
                     {printData.type === "history"
                       ? printData.data.patient.full_name
@@ -527,46 +607,52 @@ function BillingPage() {
               {printData.type === "invoice" && (
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">
-                      Invoice Details
-                    </h4>
+                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">{lang === "ar" ? "تفاصيل الفاتورة" : "Invoice Details"}</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <p>
-                        <span className="text-gray-500 font-semibold">Description:</span>{" "}
+                      <p className="col-span-2">
+                        <span className="text-gray-500 font-semibold">{lang === "ar" ? "الوصف:" : "Description:"}</span>{" "}
                         {printData.data.description || "General Physical Therapy"}
                       </p>
                       <p>
-                        <span className="text-gray-500 font-semibold">Sessions Count:</span>{" "}
+                        <span className="text-gray-500 font-semibold">{lang === "ar" ? "المعالج:" : "Therapist:"}</span>{" "}
+                        {printData.data.therapist_id
+                          ? "Dr. " +
+                            (staffList?.find((s) => s.id === printData.data.therapist_id)
+                              ?.full_name || "-")
+                          : "N/A"}
+                      </p>
+                      <p>
+                        <span className="text-gray-500 font-semibold">{lang === "ar" ? "عدد الجلسات:" : "Sessions Count:"}</span>{" "}
                         {printData.data.sessions_count || "N/A"}
                       </p>
                       <p>
-                        <span className="text-gray-500 font-semibold">Subtotal:</span> EGP{" "}
+                        <span className="text-gray-500 font-semibold">{lang === "ar" ? "المبلغ الإجمالي:" : "Subtotal:"}</span> EGP{" "}
                         {Number(printData.data.subtotal).toLocaleString()}
                       </p>
                       <p>
-                        <span className="text-gray-500 font-semibold">Discount:</span> EGP{" "}
+                        <span className="text-gray-500 font-semibold">{lang === "ar" ? "الخصم:" : "Discount:"}</span> EGP{" "}
                         {Number(printData.data.discount).toLocaleString()}
                       </p>
                     </div>
                     <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-                      <span className="text-gray-700 font-bold text-lg">Total Amount:</span>
+                      <span className="text-gray-700 font-bold text-lg">{lang === "ar" ? "المبلغ الكلي:" : "Total Amount:"}</span>
                       <span className="text-2xl font-bold text-[#0f766e]">
-                        EGP {Number(printData.data.total).toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{Number(printData.data.total).toLocaleString()}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center p-5 border-2 border-gray-200 rounded-xl bg-white">
                     <div>
-                      <p className="text-sm text-gray-500 font-semibold">Paid Amount</p>
+                      <p className="text-sm text-gray-500 font-semibold">{lang === "ar" ? "المبلغ المدفوع" : "Paid Amount"}</p>
                       <p className="font-bold text-xl text-green-600">
-                        EGP {getInvoiceStats(printData.data).paidAmount.toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{getInvoiceStats(printData.data).paidAmount.toLocaleString()}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500 font-semibold">Remaining Balance</p>
+                    <div className="text-end">
+                      <p className="text-sm text-gray-500 font-semibold">{lang === "ar" ? "الرصيد المتبقي" : "Remaining Balance"}</p>
                       <p className="font-bold text-xl text-red-600">
-                        EGP {getInvoiceStats(printData.data).remaining.toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{getInvoiceStats(printData.data).remaining.toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -576,17 +662,15 @@ function BillingPage() {
               {printData.type === "payment" && (
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-4">
-                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">
-                      Payment Details
-                    </h4>
+                    <h4 className="font-bold text-lg mb-4 border-b border-gray-200 pb-2 text-gray-800">{lang === "ar" ? "تفاصيل الدفع" : "Payment Details"}</h4>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-700 font-bold text-lg">Amount Received:</span>
+                      <span className="text-gray-700 font-bold text-lg">{lang === "ar" ? "المبلغ المستلم:" : "Amount Received:"}</span>
                       <span className="text-3xl font-bold text-[#0f766e]">
-                        EGP {Number(printData.data.amount).toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{Number(printData.data.amount).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between items-center mt-4 text-sm">
-                      <span className="text-gray-600 font-semibold">Payment Method:</span>
+                      <span className="text-gray-600 font-semibold">{lang === "ar" ? "طريقة الدفع:" : "Payment Method:"}</span>
                       <span className="font-bold uppercase text-gray-900">
                         {printData.data.method}
                       </span>
@@ -595,18 +679,16 @@ function BillingPage() {
 
                   {printData.data.invoices && (
                     <div className="p-5 border-2 border-gray-200 rounded-xl text-sm bg-white">
-                      <h5 className="font-bold text-gray-800 mb-3 border-b border-gray-100 pb-2">
-                        Applied To Invoice:
-                      </h5>
+                      <h5 className="font-bold text-gray-800 mb-3 border-b border-gray-100 pb-2">{lang === "ar" ? "مطبقة على فاتورة:" : "Applied To Invoice:"}</h5>
                       <div className="flex justify-between">
                         <p>
-                          <span className="text-gray-500 font-semibold">Description:</span>{" "}
+                          <span className="text-gray-500 font-semibold">{lang === "ar" ? "الوصف:" : "Description:"}</span>{" "}
                           {printData.data.invoices.description || "General"}
                         </p>
                         <p>
-                          <span className="text-gray-500 font-semibold">Invoice Total:</span>{" "}
+                          <span className="text-gray-500 font-semibold">{lang === "ar" ? "إجمالي الفاتورة:" : "Invoice Total:"}</span>{" "}
                           <span className="font-bold text-black">
-                            EGP {Number(printData.data.invoices.total).toLocaleString()}
+                            {lang === "ar" ? "ج.م " : "EGP "}{Number(printData.data.invoices.total).toLocaleString()}
                           </span>
                         </p>
                       </div>
@@ -619,36 +701,34 @@ function BillingPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-5 border border-gray-200 rounded-xl text-center bg-gray-50">
-                      <p className="text-sm text-gray-500 font-semibold">Total Billed</p>
+                      <p className="text-sm text-gray-500 font-semibold">{lang === "ar" ? "إجمالي الفواتير" : "Total Billed"}</p>
                       <p className="text-2xl font-bold text-[#0f766e] mt-1">
-                        EGP {printData.data.totalBilled.toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{printData.data.totalBilled.toLocaleString()}
                       </p>
                     </div>
                     <div className="p-5 border border-green-200 rounded-xl text-center bg-green-50">
-                      <p className="text-sm text-green-700 font-semibold">Total Paid</p>
+                      <p className="text-sm text-green-700 font-semibold">{lang === "ar" ? "إجمالي المدفوع" : "Total Paid"}</p>
                       <p className="text-2xl font-bold text-green-800 mt-1">
-                        EGP {printData.data.totalPaid.toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{printData.data.totalPaid.toLocaleString()}
                       </p>
                     </div>
                     <div className="p-5 border border-red-200 rounded-xl text-center bg-red-50">
-                      <p className="text-sm text-red-700 font-semibold">Outstanding Balance</p>
+                      <p className="text-sm text-red-700 font-semibold">{lang === "ar" ? "الرصيد المعلق" : "Outstanding Balance"}</p>
                       <p className="text-2xl font-bold text-red-800 mt-1">
-                        EGP {printData.data.totalRemaining.toLocaleString()}
+                        {lang === "ar" ? "ج.م " : "EGP "}{printData.data.totalRemaining.toLocaleString()}
                       </p>
                     </div>
                   </div>
 
                   <div style={{ pageBreakInside: "avoid" }}>
-                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4">
-                      Invoices Summary
-                    </h4>
-                    <table className="w-full text-sm text-left border-collapse">
+                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4">{lang === "ar" ? "ملخص الفواتير" : "Invoices Summary"}</h4>
+                    <table className="w-full text-sm text-start border-collapse">
                       <thead>
                         <tr className="border-b-2 border-gray-300 bg-gray-100">
-                          <th className="p-3 text-gray-700 font-bold">Date</th>
-                          <th className="p-3 text-gray-700 font-bold">Description</th>
-                          <th className="p-3 text-gray-700 font-bold">Total</th>
-                          <th className="p-3 text-gray-700 font-bold">Status</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "التاريخ" : "Date"}</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "الوصف" : "Description"}</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "الإجمالي" : "Total"}</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "الحالة" : "Status"}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -665,9 +745,14 @@ function BillingPage() {
                               <td className="p-3 text-gray-800 font-medium">
                                 {i.description || "General"}
                               </td>
-                              <td className="p-3 font-bold text-gray-900">EGP {i.total}</td>
+                              <td className="p-3 font-bold text-gray-900">{lang === "ar" ? "ج.م " : "EGP "}{i.total}</td>
                               <td className="p-3 capitalize font-semibold text-gray-700">
-                                {i.status}
+                                {(() => {
+                                  const stats = getInvoiceStats(i);
+                                  if (stats.remaining <= 0) return "Paid";
+                                  if (stats.paidAmount > 0) return "Partial";
+                                  return "Unpaid";
+                                })()}
                               </td>
                             </tr>
                           ),
@@ -677,15 +762,13 @@ function BillingPage() {
                   </div>
 
                   <div style={{ pageBreakInside: "avoid" }}>
-                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4 mt-6">
-                      Payments Summary
-                    </h4>
-                    <table className="w-full text-sm text-left border-collapse">
+                    <h4 className="font-bold text-lg text-gray-800 border-b-2 border-gray-200 pb-2 mb-4 mt-6">{lang === "ar" ? "ملخص المدفوعات" : "Payments Summary"}</h4>
+                    <table className="w-full text-sm text-start border-collapse">
                       <thead>
                         <tr className="border-b-2 border-gray-300 bg-gray-100">
-                          <th className="p-3 text-gray-700 font-bold">Date</th>
-                          <th className="p-3 text-gray-700 font-bold">Method</th>
-                          <th className="p-3 text-gray-700 font-bold">Amount</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "التاريخ" : "Date"}</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "طريقة الدفع" : "Method"}</th>
+                          <th className="p-3 text-gray-700 font-bold">{lang === "ar" ? "المبلغ" : "Amount"}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -701,7 +784,7 @@ function BillingPage() {
                               <td className="p-3 uppercase font-medium text-gray-800">
                                 {p.method}
                               </td>
-                              <td className="p-3 font-bold text-[#0f766e]">EGP {p.amount}</td>
+                              <td className="p-3 font-bold text-[#0f766e]">{lang === "ar" ? "ج.م " : "EGP "}{p.amount}</td>
                             </tr>
                           ),
                         )}
@@ -713,22 +796,18 @@ function BillingPage() {
 
               <div className="mt-16 pt-8 border-t-2 border-dashed border-gray-300 flex justify-between items-end">
                 <div>
-                  <p className="text-sm text-gray-500 mb-1 font-semibold">Issued By (Staff)</p>
+                  <p className="text-sm text-gray-500 mb-1 font-semibold">{lang === "ar" ? "بواسطة (الموظف)" : "Issued By (Staff)"}</p>
                   <p className="font-bold text-lg text-gray-900">{fullName}</p>
                 </div>
                 <div className="text-center">
                   <div className="w-56 border-b-2 border-gray-800 mb-2"></div>
-                  <p className="text-sm text-gray-500 font-semibold">Authorized Signature</p>
+                  <p className="text-sm text-gray-500 font-semibold">{lang === "ar" ? "توقيع معتمد" : "Authorized Signature"}</p>
                 </div>
               </div>
 
               <div className="mt-12 text-center">
-                <p className="font-bold text-[#0f766e] text-lg mb-1">
-                  Thank you for choosing Physio Life PT Center.
-                </p>
-                <p className="text-sm text-gray-500 font-medium">
-                  This is a computer-generated document and does not require a physical stamp.
-                </p>
+                <p className="font-bold text-[#0f766e] text-lg mb-1">{lang === "ar" ? "شكراً لاختياركم مركز فيزيو لايف للعلاج الطبيعي." : "Thank you for choosing Physio Life PT Center."}</p>
+                <p className="text-sm text-gray-500 font-medium">{lang === "ar" ? "هذا المستند إلكتروني ولا يحتاج لختم فعلي." : "This is a computer-generated document and does not require a physical stamp."}</p>
               </div>
             </div>
           </div>
@@ -739,11 +818,11 @@ function BillingPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Billing & Payments</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{lang === "ar" ? "الفواتير والمدفوعات" : "Billing & Payments"}</h1>
             <p className="text-sm text-muted-foreground">
               Outstanding total balance:{" "}
               <span className="font-bold text-foreground">
-                EGP {totalOutstanding.toLocaleString()}
+                {lang === "ar" ? "ج.م " : "EGP "}{totalOutstanding.toLocaleString()}
               </span>
             </p>
           </div>
@@ -752,12 +831,11 @@ function BillingPage() {
             <Dialog open={openInvoiceModal} onOpenChange={setOpenInvoiceModal}>
               <DialogTrigger asChild>
                 <Button>
-                  <Plus className="mr-2 h-4 w-4" /> New Invoice
-                </Button>
+                  <Plus className="me-2 h-4 w-4" />{lang === "ar" ? "فاتورة جديدة" : "New Invoice"}</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Invoice</DialogTitle>
+                  <DialogTitle>{lang === "ar" ? "إنشاء فاتورة" : "Create Invoice"}</DialogTitle>
                 </DialogHeader>
                 <form
                   className="space-y-4"
@@ -767,13 +845,13 @@ function BillingPage() {
                   }}
                 >
                   <div className="space-y-2">
-                    <Label>Patient</Label>
+                    <Label>{lang === "ar" ? "المريض" : "Patient"}</Label>
                     <Select
                       value={form.patient_id}
                       onValueChange={(v) => setForm({ ...form, patient_id: v })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select patient" />
+                        <SelectValue placeholder={lang === "ar" ? "اختر المريض" : "Select patient"} />
                       </SelectTrigger>
                       <SelectContent>
                         {patients.map((p) => (
@@ -784,8 +862,56 @@ function BillingPage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {(settings?.departments_enabled === "true" ||
+                    settings?.departments_enabled === true) &&
+                    departments &&
+                    departments.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>{lang === "ar" ? "القسم" : "Department"}</Label>
+                        <Select
+                          value={form.department_id}
+                          onValueChange={(v) => setForm({ ...form, department_id: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={lang === "ar" ? "اختر القسم" : "Select department"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{lang === "ar" ? "لا يوجد" : "None"}</SelectItem>
+                            {departments.map((d) => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                  {staffList && staffList.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>{lang === "ar" ? "المعالج" : "Therapist"}</Label>
+                      <Select
+                        value={form.therapist_id}
+                        onValueChange={(v) => setForm({ ...form, therapist_id: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={lang === "ar" ? "اختر المعالج" : "Select therapist"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{lang === "ar" ? "لا يوجد" : "None"}</SelectItem>
+                          {staffList.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.full_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
-                    <Label>Description / Package</Label>
+                    <Label>{lang === "ar" ? "الوصف / الباقة" : "Description / Package"}</Label>
                     <Input
                       value={form.description}
                       onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -794,7 +920,7 @@ function BillingPage() {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="space-y-2">
-                      <Label>Sessions</Label>
+                      <Label>{lang === "ar" ? "الجلسات" : "Sessions"}</Label>
                       <Input
                         type="number"
                         value={form.sessions_count}
@@ -802,7 +928,7 @@ function BillingPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Subtotal</Label>
+                      <Label>{lang === "ar" ? "المبلغ قبل الخصم" : "Subtotal"}</Label>
                       <Input
                         type="number"
                         value={form.subtotal}
@@ -811,7 +937,7 @@ function BillingPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Discount</Label>
+                      <Label>{lang === "ar" ? "الخصم" : "Discount"}</Label>
                       <Input
                         type="number"
                         value={form.discount}
@@ -842,33 +968,32 @@ function BillingPage() {
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" /> Receive Payment
-              </DialogTitle>
+                <DollarSign className="h-5 w-5 text-primary" />{lang === "ar" ? "استلام دفعة" : "Receive Payment"}</DialogTitle>
             </DialogHeader>
             {payModal.invoice && (
               <div className="space-y-4 mt-2">
                 <div className="bg-secondary/30 p-3 rounded-lg text-sm space-y-1">
                   <p>
-                    <span className="text-muted-foreground">Patient:</span>{" "}
+                    <span className="text-muted-foreground">{lang === "ar" ? "المريض:" : "Patient:"}</span>{" "}
                     {
                       (payModal.invoice as { patients?: { full_name?: string } }).patients
                         ?.full_name
                     }
                   </p>
                   <p>
-                    <span className="text-muted-foreground">Invoice Total:</span> EGP{" "}
+                    <span className="text-muted-foreground">{lang === "ar" ? "إجمالي الفاتورة:" : "Invoice Total:"}</span> EGP{" "}
                     {Number(payModal.invoice.total).toLocaleString()}
                   </p>
                   <p>
-                    <span className="text-muted-foreground">Remaining Balance:</span>{" "}
+                    <span className="text-muted-foreground">{lang === "ar" ? "الرصيد المتبقي:" : "Remaining Balance:"}</span>{" "}
                     <span className="font-bold text-destructive">
-                      EGP {payModal.remaining.toLocaleString()}
+                      {lang === "ar" ? "ج.م " : "EGP "}{payModal.remaining.toLocaleString()}
                     </span>
                   </p>
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Payment Type</Label>
+                  <Label>{lang === "ar" ? "نوع الدفع" : "Payment Type"}</Label>
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -881,23 +1006,19 @@ function BillingPage() {
                           amountToPay: payModal.remaining.toString(),
                         })
                       }
-                    >
-                      Full Amount
-                    </Button>
+                    >{lang === "ar" ? "المبلغ بالكامل" : "Full Amount"}</Button>
                     <Button
                       type="button"
                       variant={payModal.type === "partial" ? "default" : "outline"}
                       className="flex-1"
                       onClick={() => setPayModal({ ...payModal, type: "partial", amountToPay: "" })}
-                    >
-                      Partial Amount
-                    </Button>
+                    >{lang === "ar" ? "مبلغ جزئي" : "Partial Amount"}</Button>
                   </div>
                 </div>
 
                 {payModal.type === "partial" && (
                   <div className="space-y-2">
-                    <Label htmlFor="pay-amount">Amount to Pay (EGP)</Label>
+                    <Label htmlFor="pay-amount">{lang === "ar" ? "المبلغ المطلوب (ج.م)" : "Amount to Pay (EGP)"}</Label>
                     <Input
                       id="pay-amount"
                       type="number"
@@ -935,16 +1056,15 @@ function BillingPage() {
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle className="text-destructive flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Permanent Delete Invoice
-              </DialogTitle>
+                <AlertTriangle className="h-5 w-5" />{lang === "ar" ? "حذف الفاتورة نهائياً" : "Permanent Delete Invoice"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">
                 Are you sure you want to completely delete this invoice and{" "}
-                <strong>all its associated payments</strong>? This action is irreversible.
+                <strong>{lang === "ar" ? "وجميع المدفوعات المرتبطة بها" : "all its associated payments"}</strong>? {lang === "ar" ? "هذا الإجراء لا يمكن التراجع عنه." : "This action is irreversible."}
               </p>
               <div className="space-y-2">
-                <Label htmlFor="del-inv-password">Enter your password to confirm</Label>
+                <Label htmlFor="del-inv-password">{lang === "ar" ? "أدخل كلمة المرور للتأكيد" : "Enter your password to confirm"}</Label>
                 <Input
                   id="del-inv-password"
                   type="password"
@@ -975,17 +1095,34 @@ function BillingPage() {
           </DialogContent>
         </Dialog>
 
-        <Tabs defaultValue="overview">
-          <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="patient-history">Patient History</TabsTrigger>
+        <Tabs defaultValue="today">
+          <TabsList className="grid w-full sm:w-[600px] grid-cols-3">
+            <TabsTrigger value="today">{lang === "ar" ? "المعاملات" : "Transactions"}</TabsTrigger>
+            <TabsTrigger value="overview">{lang === "ar" ? "نظرة عامة" : "Overview"}</TabsTrigger>
+            <TabsTrigger value="patient-history">{lang === "ar" ? "سجل المريض" : "Patient History"}</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="today" className="space-y-6 mt-6">
+            <TodayTransactionsTab
+              onPay={(inv, remaining) =>
+                setPayModal({
+                  open: true,
+                  invoice: inv,
+                  amountToPay: remaining.toString(),
+                  remaining,
+                  type: "full",
+                })
+              }
+              onDelete={(inv) => setDeleteInvoiceModal({ open: true, invoice: inv, password: "" })}
+              staffList={staffList || []}
+            />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-9 bg-card"
+                className="ps-9 bg-card"
                 placeholder="Search invoices & payments by patient name..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -994,12 +1131,12 @@ function BillingPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Invoices</CardTitle>
+                <CardTitle className="text-base">{lang === "ar" ? "الفواتير" : "Invoices"}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {invLoading && <p className="text-sm text-muted-foreground">Loading invoices...</p>}
+                {invLoading && <p className="text-sm text-muted-foreground">{lang === "ar" ? "جاري تحميل الفواتير..." : "Loading invoices..."}</p>}
                 {!invLoading && invoicesData?.items?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No invoices found.</p>
+                  <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد فواتير." : "No invoices found."}</p>
                 )}
 
                 {invoicesData?.items?.map(
@@ -1032,7 +1169,7 @@ function BillingPage() {
 
                         <div className="flex flex-col sm:items-end gap-1 px-4 sm:border-r sm:rtl:border-l sm:rtl:border-r-0">
                           <span className="font-bold text-base">
-                            EGP {Number(i.total).toLocaleString()}
+                            {lang === "ar" ? "ج.م " : "EGP "}{Number(i.total).toLocaleString()}
                           </span>
                           {paidAmount > 0 && !isPaid && (
                             <span className="text-xs text-primary font-medium">
@@ -1042,7 +1179,16 @@ function BillingPage() {
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                          <Badge variant={isPaid ? "default" : "secondary"}>
+                          <Badge
+                            variant={isPaid ? "default" : "secondary"}
+                            className={
+                              !isPaid && paidAmount > 0
+                                ? "bg-yellow-500/20 text-yellow-700 hover:bg-yellow-500/30 border-yellow-500/20"
+                                : isPaid
+                                  ? "bg-green-600 hover:bg-green-700"
+                                  : ""
+                            }
+                          >
                             {isPaid ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid"}
                           </Badge>
 
@@ -1066,11 +1212,11 @@ function BillingPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="ml-2 font-medium"
+                            className="ms-2 font-medium"
                             onClick={() => handleExportPDF("invoice", i)}
                             disabled={isGeneratingPDF}
                           >
-                            <Download className="h-4 w-4 mr-1.5" /> PDF
+                            <Download className="h-4 w-4 me-1.5" /> PDF
                           </Button>
 
                           {canBill && (
@@ -1094,7 +1240,7 @@ function BillingPage() {
                 {invoicesData && invoicesData.total > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Rows per page:</span>
+                      <span className="text-xs text-muted-foreground">{lang === "ar" ? "الصفوف في الصفحة:" : "Rows per page:"}</span>
                       <Select
                         value={String(invPageSize)}
                         onValueChange={(v) => {
@@ -1115,7 +1261,7 @@ function BillingPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">
-                        Page {invPage} of {totalInvPages}
+                        {lang === "ar" ? `صفحة ${invPage} من ${totalInvPages}` : `Page ${invPage} of ${totalInvPages}`}
                       </span>
                       <div className="flex gap-1">
                         <Button
@@ -1125,7 +1271,7 @@ function BillingPage() {
                           onClick={() => setInvPage((p) => Math.max(1, p - 1))}
                           disabled={invPage === 1}
                         >
-                          <ChevronLeft className="h-3 w-3" />
+                          <ChevronLeft className="h-3 w-3 rtl:rotate-180" />
                         </Button>
                         <Button
                           variant="outline"
@@ -1134,7 +1280,7 @@ function BillingPage() {
                           onClick={() => setInvPage((p) => p + 1)}
                           disabled={invPage >= totalInvPages}
                         >
-                          <ChevronRight className="h-3 w-3" />
+                          <ChevronRight className="h-3 w-3 rtl:rotate-180" />
                         </Button>
                       </div>
                     </div>
@@ -1145,12 +1291,12 @@ function BillingPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent Payments</CardTitle>
+                <CardTitle className="text-base">{lang === "ar" ? "أحدث المدفوعات" : "Recent Payments"}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {payLoading && <p className="text-sm text-muted-foreground">Loading payments...</p>}
+                {payLoading && <p className="text-sm text-muted-foreground">{lang === "ar" ? "جاري تحميل المدفوعات..." : "Loading payments..."}</p>}
                 {!payLoading && paymentsData?.items?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No payments found.</p>
+                  <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد مدفوعات." : "No payments found."}</p>
                 )}
 
                 {paymentsData?.items?.map(
@@ -1175,7 +1321,7 @@ function BillingPage() {
 
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-primary">
-                          EGP {Number(p.amount).toLocaleString()}
+                          {lang === "ar" ? "ج.م " : "EGP "}{Number(p.amount).toLocaleString()}
                         </span>
 
                         <Button
@@ -1184,7 +1330,7 @@ function BillingPage() {
                           onClick={() => handleExportPDF("payment", p)}
                           disabled={isGeneratingPDF}
                         >
-                          <Download className="h-4 w-4 mr-1.5" /> PDF
+                          <Download className="h-4 w-4 me-1.5" /> PDF
                         </Button>
 
                         {canBill && (
@@ -1213,7 +1359,7 @@ function BillingPage() {
                 {paymentsData && paymentsData.total > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-3 mt-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Rows per page:</span>
+                      <span className="text-xs text-muted-foreground">{lang === "ar" ? "الصفوف في الصفحة:" : "Rows per page:"}</span>
                       <Select
                         value={String(payPageSize)}
                         onValueChange={(v) => {
@@ -1234,7 +1380,7 @@ function BillingPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground">
-                        Page {payPage} of {totalPayPages}
+                        {lang === "ar" ? `صفحة ${payPage} من ${totalPayPages}` : `Page ${payPage} of ${totalPayPages}`}
                       </span>
                       <div className="flex gap-1">
                         <Button
@@ -1244,7 +1390,7 @@ function BillingPage() {
                           onClick={() => setPayPage((p) => Math.max(1, p - 1))}
                           disabled={payPage === 1}
                         >
-                          <ChevronLeft className="h-3 w-3" />
+                          <ChevronLeft className="h-3 w-3 rtl:rotate-180" />
                         </Button>
                         <Button
                           variant="outline"
@@ -1253,7 +1399,7 @@ function BillingPage() {
                           onClick={() => setPayPage((p) => p + 1)}
                           disabled={payPage >= totalPayPages}
                         >
-                          <ChevronRight className="h-3 w-3" />
+                          <ChevronRight className="h-3 w-3 rtl:rotate-180" />
                         </Button>
                       </div>
                     </div>
@@ -1267,11 +1413,8 @@ function BillingPage() {
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <History className="h-5 w-5" /> Patient Financial History
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Select a patient to view their complete billing history.
-                </p>
+                  <History className="h-5 w-5" />{lang === "ar" ? "السجل المالي للمريض" : "Patient Financial History"}</CardTitle>
+                <p className="text-sm text-muted-foreground">{lang === "ar" ? "اختر مريضاً لعرض سجله المالي بالكامل." : "Select a patient to view their complete billing history."}</p>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -1281,10 +1424,10 @@ function BillingPage() {
                       onValueChange={setSelectedHistoryPatient}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select patient" />
+                        <SelectValue placeholder={lang === "ar" ? "اختر المريض" : "Select patient"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">-- Select a Patient --</SelectItem>
+                        <SelectItem value="all">{lang === "ar" ? "-- اختر مريض --" : "-- Select a Patient --"}</SelectItem>
                         {patients.map((p: { id: string; full_name: string; code: string }) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.full_name} ({p.code})
@@ -1301,9 +1444,9 @@ function BillingPage() {
                       disabled={isGeneratingPDF}
                     >
                       {isGeneratingPDF ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <Download className="mr-2 h-4 w-4" />
+                        <Download className="me-2 h-4 w-4" />
                       )}
                       {isGeneratingPDF ? "Generating PDF..." : "Export Full History"}
                     </Button>
@@ -1313,9 +1456,9 @@ function BillingPage() {
                 {selectedHistoryPatient !== "all" ? (
                   <div className="space-y-6 border-t pt-6">
                     <div>
-                      <h4 className="font-bold mb-3">Invoices History</h4>
+                      <h4 className="font-bold mb-3">{lang === "ar" ? "سجل الفواتير" : "Invoices History"}</h4>
                       {!patientHistory?.invoices || patientHistory.invoices.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No invoices.</p>
+                        <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد فواتير." : "No invoices."}</p>
                       ) : (
                         <div className="space-y-2">
                           {patientHistory.invoices.map(
@@ -1339,12 +1482,21 @@ function BillingPage() {
                                       {i.description || "General"} · {i.issue_date}
                                     </p>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                      Total: EGP {i.total} | Remaining: EGP {remaining}
+                                      Total: {lang === "ar" ? "ج.م " : "EGP "}{i.total} | Remaining: {lang === "ar" ? "ج.م " : "EGP "}{remaining}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-3">
-                                    <Badge variant={isPaid ? "default" : "secondary"}>
-                                      {isPaid ? "Paid" : "Unpaid"}
+                                    <Badge
+                                      variant={isPaid ? "default" : "secondary"}
+                                      className={
+                                        !isPaid && paidAmount > 0
+                                          ? "bg-yellow-500/20 text-yellow-700 hover:bg-yellow-500/30 border-yellow-500/20"
+                                          : isPaid
+                                            ? "bg-green-600 hover:bg-green-700"
+                                            : ""
+                                      }
+                                    >
+                                      {isPaid ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid"}
                                     </Badge>
                                   </div>
                                 </div>
@@ -1355,9 +1507,9 @@ function BillingPage() {
                       )}
                     </div>
                     <div>
-                      <h4 className="font-bold mb-3">Payments History</h4>
+                      <h4 className="font-bold mb-3">{lang === "ar" ? "سجل المدفوعات" : "Payments History"}</h4>
                       {!patientHistory?.payments || patientHistory.payments.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No payments.</p>
+                        <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد مدفوعات." : "No payments."}</p>
                       ) : (
                         <div className="space-y-2">
                           {patientHistory.payments.map((p: { id: string; paid_on?: string }) => (
@@ -1371,7 +1523,7 @@ function BillingPage() {
                                   Method: {p.method}
                                 </p>
                               </div>
-                              <span className="font-bold text-primary">EGP {p.amount}</span>
+                              <span className="font-bold text-primary">{lang === "ar" ? "ج.م " : "EGP "}{p.amount}</span>
                             </div>
                           ))}
                         </div>
@@ -1379,9 +1531,7 @@ function BillingPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-secondary/10">
-                    Please select a patient from the dropdown above to load their history.
-                  </div>
+                  <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-secondary/10">{lang === "ar" ? "يرجى اختيار مريض من القائمة بالأعلى لعرض السجل." : "Please select a patient from the dropdown above to load their history."}</div>
                 )}
               </CardContent>
             </Card>
