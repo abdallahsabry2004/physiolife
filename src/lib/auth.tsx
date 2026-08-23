@@ -5,12 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 export type AppRole = "super_admin" | "therapist" | "receptionist" | "assistant" | "trainee";
 
 // إعادة تعريف المفاتيح اللازمة لعمل AppShell و PageGuard
-export type PageKey = "dashboard" | "billing" | "analytics" | "financial_reports";
+export type PageKey = "dashboard" | "billing" | "analytics" | "financial_reports" | "exercise_library" | "questionnaires_library";
 export const RESTRICTED_PAGES: PageKey[] = [
   "dashboard",
   "billing",
   "analytics",
   "financial_reports",
+  "exercise_library",
+  "questionnaires_library",
 ];
 
 export type UserPermissions = {
@@ -18,6 +20,8 @@ export type UserPermissions = {
   can_access_dashboard: boolean;
   can_access_analytics: boolean;
   can_access_financial_reports: boolean;
+  can_access_exercise_library: boolean;
+  can_access_questionnaires_library: boolean;
 };
 
 type AuthState = {
@@ -92,13 +96,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           can_access_dashboard: false,
           can_access_analytics: false,
           can_access_financial_reports: false,
+          can_access_exercise_library: false,
+          can_access_questionnaires_library: false,
         };
         perms.forEach((p) => {
           if (p.page === "dashboard") permissionsObj.can_access_dashboard = p.allowed;
           if (p.page === "billing") permissionsObj.can_access_billing = p.allowed;
           if (p.page === "analytics") permissionsObj.can_access_analytics = p.allowed;
-          if (p.page === "financial_reports")
-            permissionsObj.can_access_financial_reports = p.allowed;
+          if (p.page === "financial_reports") permissionsObj.can_access_financial_reports = p.allowed;
+          if (p.page === "exercise_library") permissionsObj.can_access_exercise_library = p.allowed;
+          if (p.page === "questionnaires_library") permissionsObj.can_access_questionnaires_library = p.allowed;
         });
         setPermissions(permissionsObj);
       } else {
@@ -107,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           can_access_dashboard: false,
           can_access_analytics: false,
           can_access_financial_reports: false,
+          can_access_exercise_library: false,
+          can_access_questionnaires_library: false,
         });
       }
 
@@ -175,6 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (page === "billing") return permissions?.can_access_billing ?? false;
       if (page === "analytics") return permissions?.can_access_analytics ?? false;
       if (page === "financial_reports") return permissions?.can_access_financial_reports ?? false;
+      if (page === "exercise_library") return permissions?.can_access_exercise_library ?? false;
+      if (page === "questionnaires_library") return permissions?.can_access_questionnaires_library ?? false;
       return false;
     },
     signOut: async () => {
