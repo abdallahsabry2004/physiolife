@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,7 @@ export function TodayTransactionsTab({
   staffList = [],
 }: TodayTransactionsTabProps) {
   const { lang } = useI18n();
+  const { user } = useAuth();
   const [startDate, setStartDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [endDate, setEndDate] = useState(new Date().toLocaleDateString("en-CA"));
   const [filterPatient, setFilterPatient] = useState("");
@@ -450,6 +452,7 @@ export function TodayTransactionsTab({
           <div className="text-right">
             <h3 className="text-2xl font-bold text-gray-800 tracking-wider">FINANCIAL TRANSACTIONS</h3>
             <p className="text-gray-500 font-medium mt-2">
+              Printed By: {user?.user_metadata?.full_name || "Staff"}<br/>
               Period: {isSameDay ? startDate : `${startDate} to ${endDate}`}
             </p>
             <p className="text-gray-500 font-medium">
@@ -527,7 +530,7 @@ export function TodayTransactionsTab({
               {Object.entries(partnerShares).map(([pName, pVal]) => (
                 <div key={pName} className="flex justify-between items-center border-b border-gray-100 pb-2">
                   <span className="text-gray-700 font-medium">{pName}</span>
-                  <span className="font-bold text-gray-900">EGP {Math.round(pVal).toLocaleString()}</span>
+                  <span className="font-bold text-gray-900">EGP {pVal.toLocaleString()}</span>
                 </div>
               ))}
             </div>
