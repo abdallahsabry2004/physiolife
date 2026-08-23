@@ -57,7 +57,7 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 function PatientDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const { user, fullName, canEditClinical } = useAuth();
+  const { user, fullName, canEditClinical, canEditRegistration } = useAuth();
   const qc = useQueryClient();
   const deleteDriveFiles = useServerFn(deleteAllPatientDriveFiles);
 
@@ -145,6 +145,7 @@ function PatientDetail() {
         referral_phone: editForm.referral_phone || null,
         occupation: editForm.occupation || null,
         address: editForm.address || null,
+        referral_address: editForm.referral_address || null,
       };
 
       const { error } = await supabase.from("patients").update(payload).eq("id", id);
@@ -319,6 +320,7 @@ function PatientDetail() {
         referral_phone: patient.referral_phone || "",
         occupation: patient.occupation || "",
         address: patient.address || "",
+        referral_address: patient.referral_address || "",
       });
       setEditOpen(true);
     }
@@ -519,7 +521,7 @@ function PatientDetail() {
 
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{patient.full_name}</h1>
-            {canEditClinical && (
+            {canEditRegistration && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -636,6 +638,13 @@ function PatientDetail() {
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Patient Address</Label>
+              <Input
+                value={editForm.address}
+                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Working diagnosis</Label>
               <MedicalAutocomplete
                 value={editForm.diagnosis}
@@ -658,14 +667,12 @@ function PatientDetail() {
                 />
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Address</Label>
-                <Input
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Referral Address</Label>
+              <Input
+                value={editForm.referral_address}
+                onChange={(e) => setEditForm({ ...editForm, referral_address: e.target.value })}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={updatePatientInfo.isPending}>
               {updatePatientInfo.isPending ? "Saving..." : "Save Changes"}
