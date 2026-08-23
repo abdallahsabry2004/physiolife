@@ -28,8 +28,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const nav = [
   { to: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard, page: "dashboard" },
   { to: "/patients", label: "nav.patients", icon: Users },
-  { to: "/exercises", label: "nav.exercises", icon: Dumbbell },
-  { to: "/questionnaires", label: "nav.questionnaires", icon: ClipboardList },
+  { to: "/exercises", label: "nav.exercises", icon: Dumbbell, page: "exercise_library" },
+  { to: "/questionnaires", label: "nav.questionnaires", icon: ClipboardList, page: "questionnaires_library" },
   { to: "/billing", label: "nav.billing", icon: Receipt, page: "billing" },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
   { to: "/analytics", label: "nav.analytics", icon: BarChart3, page: "analytics" },
@@ -57,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading && isTrainee) {
-      const allowed = ["/patients", "/exercises", "/questionnaires"];
+      const allowed = ["/patients"];
       const isAllowed = allowed.some((p) => location.pathname.startsWith(p));
       if (!isAllowed) {
         void navigate({ to: "/patients" });
@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const items = nav.filter((item) => {
     if (isTrainee) {
-      return item.to === "/patients" || item.to === "/exercises" || item.to === "/questionnaires";
+      return item.to === "/patients";
     }
     return (
       (!("adminOnly" in item && item.adminOnly) || isAdmin) &&
