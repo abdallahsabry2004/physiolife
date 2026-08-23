@@ -144,7 +144,7 @@ function PatientDetail() {
         referral_source: editForm.referral_source || null,
         referral_phone: editForm.referral_phone || null,
         occupation: editForm.occupation || null,
-        address: editForm.address || null,
+        patient_address: editForm.patient_address || null,
         referral_address: editForm.referral_address || null,
       };
 
@@ -319,7 +319,7 @@ function PatientDetail() {
         referral_source: patient.referral_source || "",
         referral_phone: patient.referral_phone || "",
         occupation: patient.occupation || "",
-        address: patient.address || "",
+        patient_address: patient.patient_address || "",
         referral_address: patient.referral_address || "",
       });
       setEditOpen(true);
@@ -640,8 +640,8 @@ function PatientDetail() {
             <div className="space-y-2">
               <Label>Patient Address</Label>
               <Input
-                value={editForm.address}
-                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                value={editForm.patient_address}
+                onChange={(e) => setEditForm({ ...editForm, patient_address: e.target.value })}
               />
             </div>
             <div className="space-y-2">
