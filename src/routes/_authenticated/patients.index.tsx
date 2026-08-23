@@ -53,7 +53,7 @@ const emptyForm = {
   referral_source: "",
   referral_phone: "",
   occupation: "",
-  address: "",
+  patient_address: "",
   referral_address: "",
 };
 
@@ -140,7 +140,7 @@ function PatientsPage() {
           referral_source: form.referral_source || null,
           referral_phone: form.referral_phone || null,
           occupation: form.occupation || null,
-          address: form.address || null,
+          patient_address: form.patient_address || null,
           created_by: user?.id ?? null,
           referral_address: form.referral_address || null,
         })
@@ -249,8 +249,8 @@ function PatientsPage() {
                   <Label htmlFor="address">Patient Address</Label>
                   <Input
                     id="address"
-                    value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    value={form.patient_address}
+                    onChange={(e) => setForm({ ...form, patient_address: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
