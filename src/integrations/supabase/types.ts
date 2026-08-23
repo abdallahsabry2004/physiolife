@@ -762,6 +762,7 @@ export type Database = {
           primary_;
           referral_source: string | null;
           referral_phone: string | null;
+          referral_address: string | null;
           status: string;
           updated_at: string;
         };
@@ -787,6 +788,7 @@ export type Database = {
           primary_;
           referral_source?: string | null;
           referral_phone?: string | null;
+          referral_address?: string | null;
           status?: string;
           updated_at?: string;
         };
@@ -812,6 +814,7 @@ export type Database = {
           primary_;
           referral_source?: string | null;
           referral_phone?: string | null;
+          referral_address?: string | null;
           status?: string;
           updated_at?: string;
         };
