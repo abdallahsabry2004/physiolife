@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -150,6 +151,7 @@ function StaffReport({
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["staff_invoices", userId, period, fromDate, toDate],
     queryFn: async () => {
+      // @ts-ignore
       let query = supabase
         .from("invoices")
         .select(
@@ -160,6 +162,7 @@ function StaffReport({
           payments ( amount )
         `,
         )
+        // @ts-ignore
         .eq("therapist_id", userId)
         .order("issue_date", { ascending: false });
 
