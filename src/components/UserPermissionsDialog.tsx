@@ -21,6 +21,8 @@ const PAGE_LABELS: Record<PageKey, { en: string; ar: string }> = {
   billing: { en: "Billing", ar: "الفواتير" },
   analytics: { en: "Analytics", ar: "التحليلات" },
   financial_reports: { en: "Financial Reports", ar: "التقارير المالية" },
+  exercise_library: { en: "Exercise Library", ar: "مكتبة التمارين" },
+  questionnaires_library: { en: "Questionnaires Library", ar: "مكتبة الاستبيانات" },
 };
 
 export function UserPermissionsDialog({
@@ -65,6 +67,8 @@ export function UserPermissionsDialog({
       billing: false,
       analytics: false,
       financial_reports: false,
+      exercise_library: false,
+      questionnaires_library: false,
     };
     perms.forEach((p) => {
       if (RESTRICTED_PAGES.includes(p.page as PageKey)) {
