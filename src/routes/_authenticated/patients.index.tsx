@@ -54,6 +54,7 @@ const emptyForm = {
   referral_phone: "",
   occupation: "",
   address: "",
+  referral_address: "",
 };
 
 function PatientsPage() {
@@ -141,6 +142,7 @@ function PatientsPage() {
           occupation: form.occupation || null,
           address: form.address || null,
           created_by: user?.id ?? null,
+          referral_address: form.referral_address || null,
         })
         .select("id")
         .single();
@@ -244,6 +246,14 @@ function PatientsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="address">Patient Address</Label>
+                  <Input
+                    id="address"
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="diagnosis">Working diagnosis</Label>
                   {/* استخدام مكوّن الإكمال التلقائي الطبي بدلاً من Input[cite: 1] */}
                   <MedicalAutocomplete
@@ -270,15 +280,13 @@ function PatientsPage() {
                     />
                   </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={form.address}
-                      onChange={(e) => setForm({ ...form, address: e.target.value })}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="referralAddress">Referral Address</Label>
+                  <Input
+                    id="referralAddress"
+                    value={form.referral_address}
+                    onChange={(e) => setForm({ ...form, referral_address: e.target.value })}
+                  />
                 </div>
                 <Button type="submit" className="w-full" disabled={create.isPending}>
                   Save patient
