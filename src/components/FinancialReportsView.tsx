@@ -117,6 +117,7 @@ function StaffReport({
   onBack: () => void;
 }) {
   const { lang } = useI18n();
+  const { user } = useAuth();
   const [period, setPeriod] = useState("month"); // today, month, custom
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -507,6 +508,7 @@ function StaffReport({
             <h3 className="text-2xl font-bold text-gray-800 tracking-wider uppercase">{userName}</h3>
             <p className="text-gray-500 font-medium mt-1">Financial Report</p>
             <p className="text-gray-500 font-medium mt-2">
+              Printed By: {user?.user_metadata?.full_name || "Staff"}<br/>
               Printed: {new Date().toLocaleDateString("en-GB")} {new Date().toLocaleTimeString("en-US")}
             </p>
           </div>
@@ -528,7 +530,7 @@ function StaffReport({
           {showStaffShare && (
             <div className="border border-gray-200 p-4 rounded-lg bg-gray-50">
               <p className="text-sm text-gray-500 font-semibold mb-1">Estimated Share</p>
-              <p className="text-2xl font-bold text-[#0f766e]">EGP {Math.round(totalStaffShare).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-[#0f766e]">EGP {totalStaffShare.toLocaleString()}</p>
             </div>
           )}
         </div>
@@ -569,6 +571,7 @@ function StaffReport({
                 <th className="py-3 px-2 text-gray-700 font-bold">Department</th>
                 <th className="py-3 px-2 text-right text-gray-700 font-bold">Total</th>
                 <th className="py-3 px-2 text-right text-gray-700 font-bold">Paid</th>
+                {showStaffShare && <th className="py-3 px-2 text-right text-[#0f766e] font-bold">Share</th>}
                 <th className="py-3 px-2 text-right text-gray-700 font-bold">Status</th>
               </tr>
             </thead>
@@ -590,6 +593,27 @@ function StaffReport({
                     </td>
                     <td className="py-3 px-2 text-right text-gray-700 font-semibold">EGP {Number(inv.total || 0).toLocaleString()}</td>
                     <td className="py-3 px-2 text-right text-green-600 font-bold">EGP {paidAmount.toLocaleString()}</td>
+                    {showStaffShare && <td className="py-3 px-2 text-right text-[#0f766e] font-bold">EGP {(() => {
+                      let share = 0;
+                      if (partsEnabled && staffSources.length > 0 && partnerships) {
+                        partnerships.forEach((p) => {
+                          if (staffSources.includes(p.id)) {
+                            if (p.type === "percentage") {
+                              share += (paidAmount * (p.value || 0)) / 100;
+                            } else if (p.type === "fixed") {
+                              if (totalPaid > 0) {
+                                share += (p.value || 0) * (paidAmount / totalPaid);
+                              }
+                            } else if (p.type === "fraction") {
+                              const num = p.fraction_numerator || 0;
+                              const den = p.fraction_denominator || 1;
+                              share += paidAmount * (num / den);
+                            }
+                          }
+                        });
+                      }
+                      return share.toLocaleString();
+                    })()}</td>}
                     <td className="py-3 px-2 text-right">
                       {remaining <= 0 ? (
                         <span className="text-green-600 font-bold">Paid</span>
