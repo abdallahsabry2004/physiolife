@@ -816,7 +816,7 @@ function BillingPage() {
       {/* ---------------------------------------------------------------------------------------- */}
 
       <div className="space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-4 print:hidden">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{lang === "ar" ? "الفواتير والمدفوعات" : "Billing & Payments"}</h1>
             <p className="text-sm text-muted-foreground">
@@ -1096,7 +1096,7 @@ function BillingPage() {
         </Dialog>
 
         <Tabs defaultValue="today">
-          <TabsList className="grid w-full sm:w-[600px] grid-cols-3">
+          <TabsList className="grid w-full sm:w-[600px] grid-cols-3 print:hidden">
             <TabsTrigger value="today">{lang === "ar" ? "المعاملات" : "Transactions"}</TabsTrigger>
             <TabsTrigger value="overview">{lang === "ar" ? "نظرة عامة" : "Overview"}</TabsTrigger>
             <TabsTrigger value="patient-history">{lang === "ar" ? "سجل المريض" : "Patient History"}</TabsTrigger>
