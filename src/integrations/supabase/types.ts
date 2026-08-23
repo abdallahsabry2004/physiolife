@@ -741,7 +741,7 @@ export type Database = {
       };
       patients: {
         Row: {
-          address: string | null;
+          patient_address: string | null;
           age: number | null;
           code: string;
           created_at: string;
@@ -767,7 +767,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
-          address?: string | null;
+          patient_address?: string | null;
           age?: number | null;
           code?: string;
           created_at?: string;
@@ -789,11 +789,12 @@ export type Database = {
           referral_source?: string | null;
           referral_phone?: string | null;
           referral_address?: string | null;
+          referral_address?: string | null;
           status?: string;
           updated_at?: string;
         };
         Update: {
-          address?: string | null;
+          patient_address?: string | null;
           age?: number | null;
           code?: string;
           created_at?: string;
