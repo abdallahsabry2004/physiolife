@@ -5,7 +5,8 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; 
+import { logActivityAsync } from "@/lib/logger";
+import { PageGuard } from "@/components/PageGuard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 // استيراد المكون الذكي للاقتراحات الطبية[cite: 1]
-import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; 
+import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete";
 
 export const Route = createFileRoute("/_authenticated/exercises")({
   head: () => ({
@@ -74,32 +75,32 @@ function ExercisesPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (editingId) {
-        const oldExercise = exercises.find(e => e.id === editingId);
-        
+        const oldExercise = exercises.find((e) => e.id === editingId);
+
         const { error } = await supabase
           .from("exercises")
           .update({ ...form })
           .eq("id", editingId);
         if (error) throw error;
-        
+
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
           action: "UPDATE_EXERCISE",
           entity: `Exercise Library (${form.name})`,
-          details: { old_data: oldExercise, new_data: form }
+          details: { old_data: oldExercise, new_data: form },
         });
       } else {
         const { error } = await supabase
           .from("exercises")
           .insert({ ...form, created_by: user?.id ?? null });
         if (error) throw error;
-        
+
         logActivityAsync({
           user_id: user?.id,
           user_name: fullName,
           action: "ADD_EXERCISE",
-          entity: `Exercise Library (${form.name})`
+          entity: `Exercise Library (${form.name})`,
         });
       }
     },
@@ -115,10 +116,10 @@ function ExercisesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const oldEx = exercises.find(e => e.id === id);
+      const oldEx = exercises.find((e) => e.id === id);
       const { error } = await supabase.from("exercises").delete().eq("id", id);
       if (error) throw error;
-      
+
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
@@ -133,7 +134,19 @@ function ExercisesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const openEdit = (exercise: any) => {
+  const openEdit = (exercise: {
+    id?: string;
+    name?: string | null;
+    category?: string | null;
+    target_muscle?: string | null;
+    difficulty?: string | null;
+    sets?: string | null;
+    repetitions?: string | null;
+    frequency?: string | null;
+    hold_time?: string | null;
+    video_url?: string | null;
+    instructions?: string | null;
+  }) => {
     setForm({
       name: exercise.name || "",
       category: exercise.category || "",
@@ -166,7 +179,8 @@ function ExercisesPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <PageGuard page="exercise_library">
+      <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Exercise library</h1>
@@ -273,9 +287,9 @@ function ExercisesPage() {
                   <Button variant="ghost" size="icon" onClick={() => openEdit(e)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => {
                       if (confirm("Are you sure you want to delete this exercise?")) {
                         deleteMutation.mutate(e.id);
@@ -304,5 +318,6 @@ function ExercisesPage() {
         ))}
       </div>
     </div>
+    </PageGuard>
   );
 }
