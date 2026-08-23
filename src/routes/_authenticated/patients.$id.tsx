@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   Line,
@@ -68,6 +68,7 @@ function PatientDetail() {
   const [deletePassword, setDeletePassword] = useState("");
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isGeneratingWord, setIsGeneratingWord] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ["patient", id],
@@ -299,6 +300,29 @@ function PatientDetail() {
     }
   };
 
+  
+  const handleExportWord = async () => {
+    setIsGeneratingWord(true);
+
+    try {
+      const { generateWord } = await import("@/lib/word");
+
+      // Wait for any UI updates to render
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      await generateWord(
+        "patient-report-pdf-container",
+        `Patient_Report_${patient?.full_name?.replace(/\s+/g, "_") || "Report"}.doc`
+      );
+      toast.success("Medical Report Downloaded successfully as Word!");
+    } catch (error) {
+      console.error("Word Generation Error:", error);
+      toast.error("An error occurred while generating the Word document.");
+    } finally {
+      setIsGeneratingWord(false);
+    }
+  };
+
   const painSeries = [...sessions]
     .reverse()
     .filter((s) => s.pain_before !== null || s.pain_after !== null)
@@ -331,7 +355,7 @@ function PatientDetail() {
   return (
     <div className="space-y-6">
       {/* ----------------- قالب تصدير التقرير الطبي الشامل (PDF Export Container) ----------------- */}
-      {isGeneratingPDF && (
+      {((isGeneratingPDF || isGeneratingWord)) && (
         <div className="absolute top-0 left-0 w-[800px] z-[-50] opacity-0 pointer-events-none">
           <div id="patient-report-pdf-container" className="w-[800px] bg-white p-8 text-black">
             {/* Header */}
@@ -555,13 +579,22 @@ function PatientDetail() {
             </Badge>
           )}
 
-          <Button variant="outline" onClick={handleExportPDF} disabled={isGeneratingPDF}>
+                    <Button variant="outline" onClick={handleExportPDF} disabled={isGeneratingPDF || isGeneratingWord}>
             {isGeneratingPDF ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            {isGeneratingPDF ? "Generating..." : "Export Report"}
+            {isGeneratingPDF ? "Generating..." : "Export PDF"}
+          </Button>
+
+          <Button variant="outline" onClick={handleExportWord} disabled={isGeneratingPDF || isGeneratingWord}>
+            {isGeneratingWord ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="mr-2 h-4 w-4" />
+            )}
+            {isGeneratingWord ? "Generating..." : "Export Word"}
           </Button>
 
           {canEditClinical && (
