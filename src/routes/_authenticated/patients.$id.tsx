@@ -369,7 +369,7 @@ const painSeries = [...sessions]
                 <p className="text-gray-500 mt-2 font-medium">
                   Date: {format(new Date(), "dd/MM/yyyy hh:mm a")}
                 </p>
-                <p className="text-gray-500 font-medium">Therapist: {fullName}</p>
+                <p className="text-gray-500 font-medium">Exported by: {fullName}</p>
               </div>
             </div>
 
