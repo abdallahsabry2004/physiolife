@@ -60,11 +60,21 @@ function PatientDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const { user, fullName, canEditClinical, canEditRegistration } = useAuth();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const qc = useQueryClient();
   const deleteDriveFiles = useServerFn(deleteAllPatientDriveFiles);
 
   const [editOpen, setEditOpen] = useState(false);
+  
+  const { data: categories = [] } = useQuery({
+    queryKey: ["patient_categories"],
+    queryFn: async () => {
+      const { data } = await supabase.from("patients").select("category").not("category", "is", null);
+      const unique = Array.from(new Set(data?.map(d => d.category?.trim()).filter(Boolean) || []));
+      return unique;
+    }
+  });
+
   const [editForm, setEditForm] = useState<Record<string, string>>({});
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -92,6 +102,12 @@ function PatientDetail() {
   });
   
   const cancelVisit = useMutation({
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["today_visit", id] });
+      const previousVisit = qc.getQueryData(["today_visit", id]);
+      qc.setQueryData(["today_visit", id], null);
+      return { previousVisit };
+    },
     mutationFn: async () => {
       if (!todayVisit?.id) return;
       const { error } = await supabase.from("patient_records").delete().eq("id", todayVisit.id);
@@ -105,11 +121,15 @@ function PatientDetail() {
     },
     onSuccess: () => {
       toast.success(lang === "ar" ? "تم إلغاء الزيارة بنجاح" : "Visit cancelled successfully");
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousVisit) qc.setQueryData(["today_visit", id], context.previousVisit);
+      toast.error(err.message);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["today_visit", id] });
       qc.invalidateQueries({ queryKey: ["patient_visits", id] });
-      qc.invalidateQueries({ queryKey: ["today_visit", id] });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 
 
@@ -160,7 +180,7 @@ function PatientDetail() {
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: string) => {
-      const { error } = await supabase.from("patients").update({ status: newStatus }).eq("id", id);
+      const { error } = await supabase.from("patients").update({ status: newStatus } as any).eq("id", id);
       if (error) throw error;
 
       logActivityAsync({
@@ -181,19 +201,22 @@ function PatientDetail() {
   const updatePatientInfo = useMutation({
     mutationFn: async () => {
       const payload = {
-        full_name: editForm.full_name,
-        gender: editForm.gender || null,
-        age: editForm.age ? Number(editForm.age) : null,
-        phone: editForm.phone || null,
-        diagnosis: editForm.diagnosis || null,
-        referral_source: editForm.referral_source || null,
-        referral_phone: editForm.referral_phone || null,
-        occupation: editForm.occupation || null,
-        patient_address: editForm.patient_address || null,
-        referral_address: editForm.referral_address || null,
+        full_name: editForm['full_name'],
+        gender: editForm['gender'] || null,
+        age: editForm['age'] ? Number(editForm['age']) : null,
+        phone: editForm['phone'] || null,
+        diagnosis: editForm['diagnosis'] || null,
+        referral_source: editForm['referral_source'] || null,
+        referral_phone: editForm['referral_phone'] || null,
+        occupation: editForm['occupation'] || null,
+        patient_address: editForm['patient_address'] || null,
+        referral_address: editForm['referral_address'] || null,
+        category: editForm["category"] || null,
       };
 
-      const { error } = await supabase.from("patients").update(payload).eq("id", id);
+      
+      
+      const { error } = await supabase.from("patients").update(payload as any).eq("id", id);
       if (error) throw error;
 
       logActivityAsync({
@@ -216,6 +239,13 @@ function PatientDetail() {
 
 
   const logVisit = useMutation({
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["today_visit", id] });
+      const previousVisit = qc.getQueryData(["today_visit", id]);
+      // Optimistically set a fake visit ID so the button immediately toggles
+      qc.setQueryData(["today_visit", id], { id: "temp-optimistic-id" });
+      return { previousVisit };
+    },
     mutationFn: async () => {
       const { error } = await supabase.from("patient_records").insert({
         patient_id: id,
@@ -234,9 +264,15 @@ function PatientDetail() {
     },
     onSuccess: () => {
       toast.success(lang === "ar" ? "تم تسجيل الزيارة بنجاح" : "Visit logged successfully");
+    },
+    onError: (err, variables, context) => {
+      qc.setQueryData(["today_visit", id], context?.previousVisit);
+      toast.error(err.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["today_visit", id] });
       qc.invalidateQueries({ queryKey: ["patient_visits", id] });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 
   const deletePatient = useMutation({
@@ -383,12 +419,13 @@ const painSeries = [...sessions]
         occupation: patient.occupation || "",
         patient_address: patient.patient_address || "",
         referral_address: patient.referral_address || "",
+        category: patient.category || "",
       });
       setEditOpen(true);
     }
   };
 
-  if (!patient) return <p className="text-sm text-muted-foreground">Loading record…</p>;
+  if (!patient) return <p className="text-sm text-muted-foreground">{t("pt.loadingRecord")}</p>;
 
   return (
     <div className="space-y-6">
@@ -458,6 +495,16 @@ const painSeries = [...sessions]
                   </span>{" "}
                   <span className="font-bold text-lg text-black">{patient.code}</span>
                 </p>
+                
+                <p>
+                  <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
+                    Category
+                  </span>{" "}
+                  <span className="font-semibold text-gray-900 text-base">
+                    {patient.category || "-"}
+                  </span>
+                </p>
+
                 <p>
                   <span className="font-bold text-gray-500 uppercase mr-2 block text-xs mb-1">
                     Age / Gender
@@ -617,7 +664,7 @@ const painSeries = [...sessions]
             to="/patients"
             className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" /> All patients
+            <ArrowLeft className="mx-1 h-4 w-4" /> {t("pt.allPatients")}
           </Link>
 
           <div className="flex items-center gap-3">
@@ -634,8 +681,8 @@ const painSeries = [...sessions]
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            {patient.code} · {patient.gender ?? "—"} · {patient.age ?? "—"} yrs ·{" "}
-            {patient.phone ?? "no phone"}
+            {patient.code} · {patient.gender === "male" ? t("pt.male") : patient.gender === "female" ? t("pt.female") : "—"} · {patient.age ?? "—"} {t("pt.yrs")} ·{" "}
+            {patient.phone ?? t("pt.noPhone")}
           </p>
         </div>
         <div className="flex gap-2 items-center">
@@ -645,14 +692,14 @@ const painSeries = [...sessions]
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="on_hold">On hold</SelectItem>
-                <SelectItem value="discharged">Discharged</SelectItem>
+                <SelectItem value="active">{t("pt.active")}</SelectItem>
+                <SelectItem value="on_hold">{t("pt.onHold")}</SelectItem>
+                <SelectItem value="discharged">{t("pt.discharged")}</SelectItem>
               </SelectContent>
             </Select>
           ) : (
             <Badge variant="secondary" className="self-center capitalize">
-              {patient.status}
+              {patient.status === "active" ? t("pt.active") : patient.status === "on_hold" ? t("pt.onHold") : patient.status === "discharged" ? t("pt.discharged") : patient.status}
             </Badge>
           )}
 
@@ -660,16 +707,16 @@ const painSeries = [...sessions]
                     {todayVisit ? (
             <Button variant="destructive" onClick={() => cancelVisit.mutate()} disabled={cancelVisit.isPending}>
               {cancelVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarMinus className="mr-2 h-4 w-4" />}
-              {lang === "ar" ? "إلغاء تسجيل الزيارة" : "Cancel Visit Log"}
+              {t("pt.cancelVisitLog")}
             </Button>
           ) : (
             <Button variant="default" onClick={() => logVisit.mutate()} disabled={logVisit.isPending}>
               {logVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
-              {lang === "ar" ? "تسجيل زيارة" : "Log Visit"}
+              {t("pt.logVisit")}
             </Button>
           )}
           <Button variant="outline" onClick={() => setShowReportPreview(true)}>
-            <Printer className="mr-2 h-4 w-4" /> Preview & Print Report
+            <Printer className="mx-2 h-4 w-4" /> {t("pt.previewPrintReport")}
           </Button>
 
           {canEditClinical && (
@@ -680,7 +727,7 @@ const painSeries = [...sessions]
                 setDeleteOpen(true);
               }}
             >
-              <Trash2 className="mr-2 h-4 w-4" /> Delete
+              <Trash2 className="mx-2 h-4 w-4" /> {t("pt.delete")}
             </Button>
           )}
         </div>
@@ -689,7 +736,7 @@ const painSeries = [...sessions]
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Edit Patient Details</DialogTitle>
+            <DialogTitle>{t("pt.editPatientDetails")}</DialogTitle>
           </DialogHeader>
           <form
             className="space-y-4 mt-4"
@@ -699,22 +746,22 @@ const painSeries = [...sessions]
             }}
           >
             <div className="space-y-2">
-              <Label>Full name</Label>
+              <Label>{t("pt.fullName")}</Label>
               <Input
-                value={editForm.full_name}
+                value={editForm['full_name']}
                 onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
                 required
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Gender</Label>
+                <Label>{t("pt.gender")}</Label>
                 <Select
-                  value={editForm.gender}
+                  value={editForm['gender']}
                   onValueChange={(v) => setEditForm({ ...editForm, gender: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select" />
+                    <SelectValue placeholder={t("pt.select")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
@@ -722,63 +769,78 @@ const painSeries = [...sessions]
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="space-y-2">
-                <Label>Age</Label>
+                <Label>{t("pt.category")}</Label>
+                <Input
+                  list="patient_categories_list_edit"
+                  value={editForm['category']}
+                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                />
+                <datalist id="patient_categories_list_edit">
+                  {categories.map((c: string) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("pt.age")}</Label>
                 <Input
                   type="number"
-                  value={editForm.age}
+                  value={editForm['age']}
                   onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Phone</Label>
+                <Label>{t("pt.phone")}</Label>
                 <Input
-                  value={editForm.phone}
+                  value={editForm['phone']}
                   onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Occupation</Label>
+                <Label>{t("pt.occupation")}</Label>
                 <Input
-                  value={editForm.occupation}
+                  value={editForm['occupation']}
                   onChange={(e) => setEditForm({ ...editForm, occupation: e.target.value })}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Patient Address</Label>
+              <Label>{t("pt.patientAddress")}</Label>
               <Input
-                value={editForm.patient_address}
+                value={editForm['patient_address']}
                 onChange={(e) => setEditForm({ ...editForm, patient_address: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>Working diagnosis</Label>
+              <Label>{t("pt.diagnosis")}</Label>
               <MedicalAutocomplete
-                value={editForm.diagnosis}
+                value={editForm['diagnosis']}
                 onChange={(val) => setEditForm({ ...editForm, diagnosis: val })}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Referral source</Label>
+                <Label>{t("pt.referralSource")}</Label>
                 <Input
-                  value={editForm.referral_source}
+                  value={editForm['referral_source']}
                   onChange={(e) => setEditForm({ ...editForm, referral_source: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Referral phone number</Label>
+                <Label>{t("pt.referralPhone")}</Label>
                 <Input
-                  value={editForm.referral_phone}
+                  value={editForm['referral_phone']}
                   onChange={(e) => setEditForm({ ...editForm, referral_phone: e.target.value })}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Referral Address</Label>
+              <Label>{t("pt.referralAddress")}</Label>
               <Input
-                value={editForm.referral_address}
+                value={editForm['referral_address']}
                 onChange={(e) => setEditForm({ ...editForm, referral_address: e.target.value })}
               />
             </div>
@@ -793,17 +855,15 @@ const painSeries = [...sessions]
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" /> Permanent Delete Patient
+              <AlertTriangle className="mx-2 h-5 w-5" /> {t("pt.permanentDelete")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <p className="text-sm text-muted-foreground">
-              Are you absolutely sure you want to delete <strong>{patient.full_name}</strong>? This
-              action cannot be undone. All clinical records, sessions, and files associated with
-              this patient will be permanently removed.
+              {t("pt.deleteWarning").split("{name}")[0]}<strong>{patient.full_name}</strong>{t("pt.deleteWarning").split("{name}")[1]}
             </p>
             <div className="space-y-2">
-              <Label htmlFor="auth-password">Enter your password to confirm</Label>
+              <Label htmlFor="auth-password">{t("pt.enterPassword")}</Label>
               <Input
                 id="auth-password"
                 type="password"
