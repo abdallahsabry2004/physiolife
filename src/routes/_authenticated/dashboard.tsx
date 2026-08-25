@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -38,13 +39,21 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   ),
 });
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const toLocalISOString = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const todayISO = () => toLocalISOString(new Date());
 const monthStartISO = () => {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return toLocalISOString(new Date(d.getFullYear(), d.getMonth(), 1));
 };
 
 function Dashboard() {
+  const { t, lang } = useI18n();
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
@@ -52,7 +61,10 @@ function Dashboard() {
       const [total, active, discharged, newThisMonth, todaySessions, payments, unpaid] =
         await Promise.all([
           supabase.from("patients").select("id", { count: "exact", head: true }),
-          supabase.from("patients").select("id", { count: "exact", head: true }).eq("status", "active"),
+          supabase
+            .from("patients")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "active"),
           supabase
             .from("patients")
             .select("id", { count: "exact", head: true })
@@ -107,21 +119,21 @@ function Dashboard() {
   });
 
   const cards = [
-    { label: "Today's sessions", value: stats?.todaySessions ?? 0, icon: CalendarCheck },
-    { label: "Total patients", value: stats?.total ?? 0, icon: Users },
-    { label: "Active patients", value: stats?.active ?? 0, icon: UserCheck },
-    { label: "Discharged", value: stats?.discharged ?? 0, icon: UserMinus },
-    { label: "New this month", value: stats?.newThisMonth ?? 0, icon: UserPlus },
-    { label: "Revenue collected", value: `EGP ${stats?.revenue ?? 0}`, icon: Wallet },
-    { label: "Outstanding balance", value: `EGP ${stats?.outstanding ?? 0}`, icon: AlertCircle },
+    { label: t("dashboard.todaySessions"), value: stats?.todaySessions ?? 0, icon: CalendarCheck },
+    { label: t("dashboard.totalPatients"), value: stats?.total ?? 0, icon: Users },
+    { label: t("dashboard.activePatients"), value: stats?.active ?? 0, icon: UserCheck },
+    { label: t("dashboard.discharged"), value: stats?.discharged ?? 0, icon: UserMinus },
+    { label: t("dashboard.newThisMonth"), value: stats?.newThisMonth ?? 0, icon: UserPlus },
+    { label: t("dashboard.revenueCollected"), value: `${lang === "ar" ? "ج.م" : "EGP"} ${stats?.revenue ?? 0}`, icon: Wallet },
+    { label: t("dashboard.outstandingBalance"), value: `${lang === "ar" ? "ج.م" : "EGP"} ${stats?.outstanding ?? 0}`, icon: AlertCircle },
   ];
 
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Clinic dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("dashboard.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          Live snapshot of the Physio Life caseload, sessions and finances.
+          {t("dashboard.desc")}
         </p>
       </header>
 
@@ -147,12 +159,12 @@ function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="h-4 w-4" /> Recent treatment sessions
+              <Activity className="h-4 w-4" /> {t("dashboard.recentSessions")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {recent.length === 0 && (
-              <p className="text-sm text-muted-foreground">No sessions recorded yet.</p>
+              <p className="text-sm text-muted-foreground">{t("dashboard.noSessions")}</p>
             )}
             {recent.map((s) => (
               <Link
@@ -162,10 +174,10 @@ function Dashboard() {
                 className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition hover:bg-secondary"
               >
                 <span className="font-medium">
-                  {(s.patients as { full_name: string } | null)?.full_name ?? "Patient"}
+                  {(s.patients as { full_name: string } | null)?.full_name ?? t("dashboard.patient")}
                 </span>
                 <span className="flex items-center gap-3 text-muted-foreground">
-                  Session #{s.session_number}
+                  {t("dashboard.sessionNumber")}{s.session_number}
                   <Badge variant="secondary">{s.attendance}</Badge>
                   {s.session_date}
                 </span>
@@ -176,12 +188,12 @@ function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Notifications</CardTitle>
+            <CardTitle className="text-base">{t("dashboard.notifications")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {notifications.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Follow-ups, pending payments and reassessment reminders appear here.
+                {t("dashboard.noNotifications")}
               </p>
             )}
             {notifications.map((n) => (
