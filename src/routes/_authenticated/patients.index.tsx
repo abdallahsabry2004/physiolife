@@ -55,11 +55,22 @@ const emptyForm = {
   occupation: "",
   patient_address: "",
   referral_address: "",
+  category: "",
 };
 
 function PatientsPage() {
   const { user, fullName, isTrainee } = useAuth();
   const qc = useQueryClient();
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["patient_categories"],
+    queryFn: async () => {
+      const { data } = await supabase.from("patients").select("category").not("category", "is", null);
+      const unique = Array.from(new Set(data?.map(d => d.category?.trim()).filter(Boolean) || []));
+      return unique;
+    }
+  });
+
 
   // حالات التحكم في البحث والفلترة وتقسيم الصفحات
   const [searchInput, setSearchInput] = useState("");
@@ -100,7 +111,7 @@ function PatientsPage() {
 
       if (searchTerm) {
         query = query.or(
-          `full_name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`,
+          `full_name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`,
         );
       }
       if (isTrainee) {
@@ -131,8 +142,7 @@ function PatientsPage() {
     mutationFn: async () => {
       const { data, error } = await supabase
         .from("patients")
-        .insert({
-          full_name: form.full_name,
+        .insert({full_name: form.full_name,
           gender: form.gender || null,
           age: form.age ? Number(form.age) : null,
           phone: form.phone || null,
@@ -143,7 +153,7 @@ function PatientsPage() {
           patient_address: form.patient_address || null,
           created_by: user?.id ?? null,
           referral_address: form.referral_address || null,
-        })
+          category: form["category"] || null,} as any)
         .select("id")
         .single();
       if (error) throw error;
@@ -219,6 +229,22 @@ function PatientsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category</Label>
+                  <Input
+                    id="category"
+                    list="patient_categories_list"
+                    value={form['category']}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  />
+                  <datalist id="patient_categories_list">
+                    {categories.map((c: string) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="age">Age</Label>
                     <Input
