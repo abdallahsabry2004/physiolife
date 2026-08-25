@@ -54,7 +54,8 @@ function NotificationsPage() {
   const { data: alerts } = useQuery({
     queryKey: ["notification-alerts"],
     queryFn: async () => {
-      const cutoff = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10);
+      const d = new Date(Date.now() - 21 * 86400000);
+      const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const [{ data: unpaid }, { data: patients }, { data: sessions }] = await Promise.all([
         supabase
           .from("invoices")
