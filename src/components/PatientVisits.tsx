@@ -12,13 +12,7 @@ import { generatePDF } from "@/lib/pdf";
 import { toast } from "sonner";
 import logo from "@/assets/physio-life-logo.png";
 
-export function PatientVisits({
-  patientId,
-  patientName,
-}: {
-  patientId: string;
-  patientName: string;
-}) {
+export function PatientVisits({ patientId, patientName }: { patientId: string; patientName: string }) {
   const { user, fullName } = useAuth();
   const qc = useQueryClient();
   const { lang } = useI18n();
@@ -35,49 +29,43 @@ export function PatientVisits({
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
+      
       if (!data || data.length === 0) return [];
-
+      
       // Fetch names of users who recorded them
-      const userIds = [...new Set(data.map((d) => d.recorded_by).filter(Boolean))];
-
+      const userIds = [...new Set(data.map(d => d.recorded_by).filter(Boolean))];
+      
       let profilesMap: Record<string, string> = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
           .select("id, full_name")
           .in("id", userIds as string[]);
-
+        
         if (profiles) {
-          profiles.forEach((p) => {
+          profiles.forEach(p => {
             profilesMap[p.id] = p.full_name || "Unknown";
           });
         }
       }
 
-      return data.map((d) => ({
+      return data.map(d => ({
         ...d,
-        recorderName: d.recorded_by ? profilesMap[d.recorded_by] || "Unknown" : "Unknown",
+        recorderName: d.recorded_by ? profilesMap[d.recorded_by] || "Unknown" : "Unknown"
       }));
     },
   });
 
   const handlePrintVisits = async () => {
     try {
-      toast.info(
-        lang === "ar" ? "جاري تجهيز التقرير للطباعة..." : "Preparing document for print...",
-      );
+      toast.info(lang === "ar" ? "جاري تجهيز التقرير للطباعة..." : "Preparing document for print...");
       await generatePDF(
         "patient-visits-pdf-container",
-        `Visits_Report_${patientName.replace(/\s+/g, "_")}.pdf`,
+        `Visits_Report_${patientName.replace(/\s+/g, "_")}.pdf`
       );
     } catch (error) {
       console.error("PDF Generation Error:", error);
-      toast.error(
-        lang === "ar"
-          ? "حدث خطأ أثناء إعداد التقرير للطباعة."
-          : "An error occurred while generating the PDF.",
-      );
+      toast.error(lang === "ar" ? "حدث خطأ أثناء إعداد التقرير للطباعة." : "An error occurred while generating the PDF.");
     }
   };
 
@@ -86,25 +74,16 @@ export function PatientVisits({
       <Card className="mt-6">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle>{lang === "ar" ? "سجل الزيارات" : "Visits Log"}</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrintVisits}
-            disabled={visits.length === 0}
-          >
+          <Button variant="outline" size="sm" onClick={handlePrintVisits} disabled={visits.length === 0}>
             <Printer className="mr-2 h-4 w-4" />
             {lang === "ar" ? "طباعة تقرير الزيارات" : "Print Visits Report"}
           </Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">
-              {lang === "ar" ? "جاري التحميل..." : "Loading..."}
-            </p>
+            <p className="text-sm text-muted-foreground">{lang === "ar" ? "جاري التحميل..." : "Loading..."}</p>
           ) : visits.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد زيارات مسجلة." : "No logged visits."}
-            </p>
+            <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد زيارات مسجلة." : "No logged visits."}</p>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm text-left rtl:text-right">
@@ -112,20 +91,14 @@ export function PatientVisits({
                   <tr>
                     <th className="px-4 py-3 font-medium">{lang === "ar" ? "التاريخ" : "Date"}</th>
                     <th className="px-4 py-3 font-medium">{lang === "ar" ? "الوقت" : "Time"}</th>
-                    <th className="px-4 py-3 font-medium">
-                      {lang === "ar" ? "تسجيل بواسطة" : "Recorded By"}
-                    </th>
+                    <th className="px-4 py-3 font-medium">{lang === "ar" ? "تسجيل بواسطة" : "Recorded By"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {visits.map((visit) => (
                     <tr key={visit.id} className="bg-card hover:bg-muted/50 transition-colors">
-                      <td className="px-4 py-3">
-                        {format(new Date(visit.created_at), "yyyy-MM-dd")}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {format(new Date(visit.created_at), "hh:mm a")}
-                      </td>
+                      <td className="px-4 py-3">{format(new Date(visit.created_at), "yyyy-MM-dd")}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{format(new Date(visit.created_at), "hh:mm a")}</td>
                       <td className="px-4 py-3 font-medium">{visit.recorderName}</td>
                     </tr>
                   ))}
@@ -138,8 +111,8 @@ export function PatientVisits({
 
       {/* Hidden container for printing */}
       <div className="hidden">
-        <div
-          id="patient-visits-pdf-container"
+        <div 
+          id="patient-visits-pdf-container" 
           className="w-[800px] min-w-[800px] bg-white p-8 text-black shadow-md rounded-sm"
           dir="ltr"
         >
@@ -205,12 +178,8 @@ export function PatientVisits({
               <tbody>
                 {visits.map((visit) => (
                   <tr key={visit.id} className="border-b border-gray-200">
-                    <td className="p-3 border-x border-gray-200">
-                      {format(new Date(visit.created_at), "yyyy-MM-dd")}
-                    </td>
-                    <td className="p-3 border-x border-gray-200">
-                      {format(new Date(visit.created_at), "hh:mm a")}
-                    </td>
+                    <td className="p-3 border-x border-gray-200">{format(new Date(visit.created_at), "yyyy-MM-dd")}</td>
+                    <td className="p-3 border-x border-gray-200">{format(new Date(visit.created_at), "hh:mm a")}</td>
                     <td className="p-3 border-x border-gray-200">{visit.recorderName}</td>
                   </tr>
                 ))}
