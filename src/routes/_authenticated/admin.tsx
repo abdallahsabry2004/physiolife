@@ -675,7 +675,7 @@ function AdminPage() {
   );
 }
 
-const MODULES = ["history", "exam", "diagnosis", "session", "measurements", "body_chart"] as const;
+const MODULES = ["history", "exam", "diagnosis", "treatment", "session", "measurements", "body_chart"] as const;
 
 const MARKER_COLORS = [
   { label: "Red", value: "bg-red-500 text-white" },
