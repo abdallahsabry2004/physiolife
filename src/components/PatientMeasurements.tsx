@@ -24,7 +24,10 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
   const [metric, setMetric] = useState("");
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+});
   const [selected, setSelected] = useState<string | null>(null);
 
   // جلب الاقتراحات من لوحة الإدارة
@@ -86,7 +89,7 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
   });
 
   const metrics = Array.from(new Set(rows.map((r) => r.metric)));
-  const activeMetric = selected && metrics.includes(selected) ? selected : metrics[0] ?? null;
+  const activeMetric = selected && metrics.includes(selected) ? selected : (metrics[0] ?? null);
   const series = rows
     .filter((r) => r.metric === activeMetric)
     .map((r) => ({ name: r.measured_on, value: Number(r.value) }));
@@ -148,7 +151,9 @@ export function PatientMeasurements({ patientId }: { patientId: string }) {
                 </button>
               ))}
               {suggestedMetrics.length === 0 && (
-                <p className="text-xs text-muted-foreground">Add suggestions from the Administration panel.</p>
+                <p className="text-xs text-muted-foreground">
+                  Add suggestions from the Administration panel.
+                </p>
               )}
             </div>
           </CardContent>
