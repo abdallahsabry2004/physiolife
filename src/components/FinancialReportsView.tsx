@@ -55,6 +55,7 @@ export function FinancialReportsView() {
         userId={selectedUserId}
         userName={selectedUser?.full_name || ""}
         onBack={() => setSelectedUserId(null)}
+        staffList={staffList}
       />
     );
   }
@@ -112,13 +113,15 @@ function StaffReport({
   userId,
   userName,
   onBack,
+  staffList,
 }: {
   userId: string;
   userName: string;
   onBack: () => void;
+  staffList?: any[];
 }) {
   const { lang } = useI18n();
-  const { user } = useAuth();
+  const { user, fullName } = useAuth();
   const [period, setPeriod] = useState("month"); // today, month, custom
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -511,7 +514,7 @@ function StaffReport({
             <h3 className="text-2xl font-bold text-gray-800 tracking-wider uppercase">{userName}</h3>
             <p className="text-gray-500 font-medium mt-1">Financial Report</p>
             <p className="text-gray-500 font-medium mt-2">
-              Printed By: {user?.user_metadata?.full_name || "Staff"}<br/>
+              Printed By: {fullName || user?.user_metadata?.full_name || user?.email || "Staff"}<br/>
               Printed: {new Date().toLocaleDateString("en-GB")} {new Date().toLocaleTimeString("en-US")}
             </p>
           </div>
@@ -569,9 +572,9 @@ function StaffReport({
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="border-b-2 border-[#0f766e]">
-                <th className="py-3 px-2 text-gray-700 font-bold">Date</th>
+                <th className="py-3 px-2 text-gray-700 font-bold">Date & Time</th>
                 <th className="py-3 px-2 text-gray-700 font-bold">Patient</th>
-                <th className="py-3 px-2 text-gray-700 font-bold">Department</th>
+                <th className="py-3 px-2 text-gray-700 font-bold">Description / Dept / Therapist</th>
                 <th className="py-3 px-2 text-right text-gray-700 font-bold">Total</th>
                 <th className="py-3 px-2 text-right text-gray-700 font-bold">Paid</th>
                 {showStaffShare && <th className="py-3 px-2 text-right text-[#0f766e] font-bold">Share</th>}
@@ -584,15 +587,23 @@ function StaffReport({
                 return (
                   <tr key={inv.id} className="border-b border-gray-100">
                     <td className="py-3 px-2 text-gray-600 font-medium whitespace-nowrap">
-                      {new Date(inv.issue_date).toLocaleDateString("en-GB")}
+                      {new Date(inv.issue_date).toLocaleDateString("en-GB")}<br/>
+                      <span className="text-xs text-gray-500">{new Date(inv.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
                     </td>
                     <td className="py-3 px-2 font-bold text-gray-800">
                       {/* @ts-ignore */}
                       {inv.patients?.full_name}
                     </td>
                     <td className="py-3 px-2 text-gray-700">
-                      {/* @ts-ignore */}
-                      {inv.clinic_departments?.name || "-"}
+                      <span className="block font-medium">{inv.description || "-"}</span>
+                      <span className="text-xs text-gray-500">
+                        {/* @ts-ignore */}
+                        {inv.clinic_departments?.name ? `${inv.clinic_departments.name} • ` : ""}
+                        {(() => {
+                           const therapistName = staffList?.find((s) => s.id === inv.therapist_id)?.full_name;
+                           return therapistName ? `Dr. ${therapistName}` : "";
+                        })()}
+                      </span>
                     </td>
                     <td className="py-3 px-2 text-right text-gray-700 font-semibold">EGP {Number(inv.total || 0).toLocaleString()}</td>
                     <td className="py-3 px-2 text-right text-green-600 font-bold">EGP {paidAmount.toLocaleString()}</td>
