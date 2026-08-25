@@ -130,6 +130,23 @@ const dict = {
   "pt.next": { en: "Next", ar: "التالي" },
   "pt.registeredSuccess": { en: "Patient registered", ar: "تم تسجيل المريض بنجاح" },
   "pt.yrs": { en: "yrs", ar: "سنة" },
+  // Dashboard
+  "dashboard.title": { en: "Clinic dashboard", ar: "لوحة تحكم العيادة" },
+  "dashboard.desc": { en: "Live snapshot of the Physio Life caseload, sessions and finances.", ar: "نظرة عامة حية على الحالات والجلسات والمالية الخاصة بـ Physio Life." },
+  "dashboard.todaySessions": { en: "Today's sessions", ar: "جلسات اليوم" },
+  "dashboard.totalPatients": { en: "Total patients", ar: "إجمالي المرضى" },
+  "dashboard.activePatients": { en: "Active patients", ar: "المرضى النشطين" },
+  "dashboard.discharged": { en: "Discharged", ar: "المرضى منتهية فترة علاجهم" },
+  "dashboard.newThisMonth": { en: "New this month", ar: "جديد هذا الشهر" },
+  "dashboard.revenueCollected": { en: "Revenue collected", ar: "الإيرادات المحصلة" },
+  "dashboard.outstandingBalance": { en: "Outstanding balance", ar: "الرصيد غير المدفوع" },
+  "dashboard.recentSessions": { en: "Recent treatment sessions", ar: "جلسات العلاج الأخيرة" },
+  "dashboard.noSessions": { en: "No sessions recorded yet.", ar: "لم يتم تسجيل أي جلسات بعد." },
+  "dashboard.sessionNumber": { en: "Session #", ar: "جلسة رقم " },
+  "dashboard.notifications": { en: "Notifications", ar: "الإشعارات" },
+  "dashboard.noNotifications": { en: "Follow-ups, pending payments and reassessment reminders appear here.", ar: "تظهر هنا المتابعات، المدفوعات المعلقة وتذكيرات إعادة التقييم." },
+  "dashboard.patient": { en: "Patient", ar: "مريض" },
+
   // Patient Details Top Card
   "pt.allPatients": { en: "All patients", ar: "كل المرضى" },
   "pt.editPatientDetails": { en: "Edit Patient Details", ar: "تعديل بيانات المريض" },
