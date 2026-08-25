@@ -13,7 +13,13 @@ import {
   updatePatientFile,
 } from "@/lib/drive.functions";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 import { Button } from "@/components/ui/button";
@@ -86,8 +92,12 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const saveRecord = useServerFn(saveFileRecord);
   const removeFile = useServerFn(deletePatientFile);
   const updateFile = useServerFn(updatePatientFile);
-  
-  const [editingFile, setEditingFile] = useState<{ id: string; name: string; category: string } | null>(null);
+
+  const [editingFile, setEditingFile] = useState<{
+    id: string;
+    name: string;
+    category: string;
+  } | null>(null);
 
   const { data: files = [] } = useQuery({
     queryKey: ["files", patientId],
@@ -192,10 +202,10 @@ export function PatientFiles({ patientId }: { patientId: string }) {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Files uploaded successfully");
       setUploadStats(null);
-      void qc.invalidateQueries({ queryKey: ["files", patientId] });
+      await qc.invalidateQueries({ queryKey: ["files", patientId] });
     },
     onError: (e: Error) => {
       toast.error(e.message);
@@ -210,10 +220,10 @@ export function PatientFiles({ patientId }: { patientId: string }) {
     mutationFn: async (data: { fileId: string; newName: string; newCategory: string }) => {
       await updateFile({ data });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("File updated successfully");
       setEditingFile(null);
-      void qc.invalidateQueries({ queryKey: ["files", patientId] });
+      await qc.invalidateQueries({ queryKey: ["files", patientId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -222,9 +232,9 @@ export function PatientFiles({ patientId }: { patientId: string }) {
     mutationFn: async (fileId: string) => {
       await removeFile({ data: { fileId } });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("File removed");
-      void qc.invalidateQueries({ queryKey: ["files", patientId] });
+      await qc.invalidateQueries({ queryKey: ["files", patientId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -337,20 +347,22 @@ export function PatientFiles({ patientId }: { patientId: string }) {
             </a>
             {canEditClinical && (
               <>
-              <button
-                onClick={() => setEditingFile({ id: f.id, name: f.file_name, category: f.category })}
-                className="text-muted-foreground transition hover:text-primary"
-                aria-label={`Edit ${f.file_name}`}
-              >
-                <Edit2 className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => deleteMutation.mutate(f.id)}
-                className="text-muted-foreground transition hover:text-destructive"
-                aria-label={`Delete ${f.file_name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+                <button
+                  onClick={() =>
+                    setEditingFile({ id: f.id, name: f.file_name, category: f.category })
+                  }
+                  className="text-muted-foreground transition hover:text-primary"
+                  aria-label={`Edit ${f.file_name}`}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => deleteMutation.mutate(f.id)}
+                  className="text-muted-foreground transition hover:text-destructive"
+                  aria-label={`Delete ${f.file_name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </>
             )}
           </div>
