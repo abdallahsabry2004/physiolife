@@ -52,7 +52,10 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
   const [selectedId, setSelectedId] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [imageManualScore, setImageManualScore] = useState("");
-  const [assessedOn, setAssessedOn] = useState(() => new Date().toISOString().slice(0, 10));
+  const [assessedOn, setAssessedOn] = useState(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+});
   const [notes, setNotes] = useState("");
 
   // State للتحكم في نافذة عرض تفاصيل التقييم القديم
@@ -310,59 +313,64 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
             </CardHeader>
             <CardContent className="space-y-4">
               {meta?.scoring_method !== "image" && (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={series}>
-                    <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
-                    <YAxis
-                      stroke="currentColor"
-                      fontSize={12}
-                      domain={[
-                        meta?.min_score !== undefined && meta?.min_score !== null
-                          ? Number(meta.min_score)
-                          : "auto",
-                        meta?.max_score !== undefined && meta?.max_score !== null
-                          ? Number(meta.max_score)
-                          : "auto",
-                      ]}
-                    />
-                    <ChartTooltip />
-                    {mcid !== null && (
-                      <>
-                        <ReferenceLine
-                          y={baseline + mcid}
-                          stroke="var(--chart-2)"
-                          strokeDasharray="4 4"
-                          label={{ value: `MCID +${mcid}`, fontSize: 10 }}
-                        />
-                        <ReferenceLine
-                          y={baseline - mcid}
-                          stroke="var(--chart-2)"
-                          strokeDasharray="4 4"
-                          label={{ value: `MCID -${mcid}`, fontSize: 10 }}
-                        />
-                      </>
-                    )}
-                    {mdc !== null && (
-                      <>
-                        <ReferenceLine
-                          y={baseline + mdc}
-                          stroke="var(--chart-3)"
-                          strokeDasharray="2 6"
-                          label={{ value: `MDC +${mdc}`, fontSize: 10 }}
-                        />
-                        <ReferenceLine
-                          y={baseline - mdc}
-                          stroke="var(--chart-3)"
-                          strokeDasharray="2 6"
-                          label={{ value: `MDC -${mdc}`, fontSize: 10 }}
-                        />
-                      </>
-                    )}
-                    <Line type="monotone" dataKey="score" stroke="var(--chart-1)" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={series}>
+                      <XAxis dataKey="name" stroke="currentColor" fontSize={12} />
+                      <YAxis
+                        stroke="currentColor"
+                        fontSize={12}
+                        domain={[
+                          meta?.min_score !== undefined && meta?.min_score !== null
+                            ? Number(meta.min_score)
+                            : "auto",
+                          meta?.max_score !== undefined && meta?.max_score !== null
+                            ? Number(meta.max_score)
+                            : "auto",
+                        ]}
+                      />
+                      <ChartTooltip />
+                      {mcid !== null && (
+                        <>
+                          <ReferenceLine
+                            y={baseline + mcid}
+                            stroke="var(--chart-2)"
+                            strokeDasharray="4 4"
+                            label={{ value: `MCID +${mcid}`, fontSize: 10 }}
+                          />
+                          <ReferenceLine
+                            y={baseline - mcid}
+                            stroke="var(--chart-2)"
+                            strokeDasharray="4 4"
+                            label={{ value: `MCID -${mcid}`, fontSize: 10 }}
+                          />
+                        </>
+                      )}
+                      {mdc !== null && (
+                        <>
+                          <ReferenceLine
+                            y={baseline + mdc}
+                            stroke="var(--chart-3)"
+                            strokeDasharray="2 6"
+                            label={{ value: `MDC +${mdc}`, fontSize: 10 }}
+                          />
+                          <ReferenceLine
+                            y={baseline - mdc}
+                            stroke="var(--chart-3)"
+                            strokeDasharray="2 6"
+                            label={{ value: `MDC -${mdc}`, fontSize: 10 }}
+                          />
+                        </>
+                      )}
+                      <Line
+                        type="monotone"
+                        dataKey="score"
+                        stroke="var(--chart-1)"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               )}
 
               <div className="space-y-2">
@@ -375,11 +383,21 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                       <p className="font-medium">
                         {r.assessed_on}
                         {meta?.scoring_method !== "image" && ` · score ${Number(r.final_score)}`}
-                        {meta?.scoring_method !== "image" && r.max_possible ? ` / ${Number(r.max_possible)}` : ""}
+                        {meta?.scoring_method !== "image" && r.max_possible
+                          ? ` / ${Number(r.max_possible)}`
+                          : ""}
                       </p>
                       {r.interpretation && (
-                        <p className={meta?.scoring_method === "image" ? "font-semibold mt-1" : "text-muted-foreground"}>
-                          {meta?.scoring_method === "image" ? `Result: ${r.interpretation}` : r.interpretation}
+                        <p
+                          className={
+                            meta?.scoring_method === "image"
+                              ? "font-semibold mt-1"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {meta?.scoring_method === "image"
+                            ? `Result: ${r.interpretation}`
+                            : r.interpretation}
                         </p>
                       )}
                       {r.notes && <p className="text-muted-foreground">{r.notes}</p>}
@@ -517,26 +535,20 @@ export function PatientAssessments({ patientId }: { patientId: string }) {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {(activeQ.interpretation as Record<string, string>[])?.map((file, idx) => (
-                    <Button
-                      key={idx}
-                      variant="outline"
-                      asChild
-                    >
+                    <Button key={idx} variant="outline" asChild>
                       <a href={file.webViewLink} target="_blank" rel="noreferrer">
                         <Printer className="mr-2 h-4 w-4" /> View File {idx + 1}
                       </a>
                     </Button>
                   ))}
-                  {!(activeQ.interpretation as Record<string, string>[])?.length && activeQ.scoring_formula && (
-                    <Button
-                      variant="outline"
-                      asChild
-                    >
-                      <a href={activeQ.scoring_formula} target="_blank" rel="noreferrer">
-                        <Printer className="mr-2 h-4 w-4" /> View Link
-                      </a>
-                    </Button>
-                  )}
+                  {!(activeQ.interpretation as Record<string, string>[])?.length &&
+                    activeQ.scoring_formula && (
+                      <Button variant="outline" asChild>
+                        <a href={activeQ.scoring_formula} target="_blank" rel="noreferrer">
+                          <Printer className="mr-2 h-4 w-4" /> View Link
+                        </a>
+                      </Button>
+                    )}
                 </div>
                 <div className="space-y-2 mt-4">
                   <Label>Patient Result</Label>
