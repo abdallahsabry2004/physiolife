@@ -167,25 +167,25 @@ function StaffReport({
         .order("issue_date", { ascending: false });
 
       const today = new Date();
+      
+      // Helper to format Date to local YYYY-MM-DD string
+      const toLocalISOString = (date: Date) => {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
       if (period === "today") {
-        const start = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-        const end = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-        query = query.gte("issue_date", start).lte("issue_date", end);
+        const dateStr = toLocalISOString(today);
+        query = query.gte("issue_date", dateStr).lte("issue_date", dateStr);
       } else if (period === "month") {
-        const start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-        const end = new Date(
-          today.getFullYear(),
-          today.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        ).toISOString();
+        const start = toLocalISOString(new Date(today.getFullYear(), today.getMonth(), 1));
+        const end = toLocalISOString(new Date(today.getFullYear(), today.getMonth() + 1, 0));
         query = query.gte("issue_date", start).lte("issue_date", end);
       } else if (period === "custom") {
-        if (fromDate) query = query.gte("issue_date", new Date(fromDate).toISOString());
-        if (toDate) query = query.lte("issue_date", new Date(toDate + "T23:59:59").toISOString());
+        if (fromDate) query = query.gte("issue_date", fromDate);
+        if (toDate) query = query.lte("issue_date", toDate);
       }
 
       const { data, error } = await query;
