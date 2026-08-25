@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-background">
       <aside
         className={cn(
-          "fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0",
+          "print:hidden fixed inset-y-0 z-40 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform ltr:left-0 rtl:right-0",
           open ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
           "ltr:lg:translate-x-0 rtl:lg:translate-x-0",
         )}
@@ -176,8 +176,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64">
-        <header className="flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
+      <div className="flex min-w-0 flex-1 flex-col ltr:lg:ml-64 rtl:lg:mr-64 print:!ml-0 print:!mr-0">
+        <header className="print:hidden flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
           <button onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
