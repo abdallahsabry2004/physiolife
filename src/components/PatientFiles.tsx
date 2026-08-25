@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ExternalLink, Loader2, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Loader2, Trash2, Upload, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -10,7 +10,12 @@ import {
   initiateDriveUpload,
   uploadDriveChunk,
   saveFileRecord,
+  updatePatientFile,
 } from "@/lib/drive.functions";
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +85,9 @@ export function PatientFiles({ patientId }: { patientId: string }) {
   const sendChunk = useServerFn(uploadDriveChunk);
   const saveRecord = useServerFn(saveFileRecord);
   const removeFile = useServerFn(deletePatientFile);
+  const updateFile = useServerFn(updatePatientFile);
+  
+  const [editingFile, setEditingFile] = useState<{ id: string; name: string; category: string } | null>(null);
 
   const { data: files = [] } = useQuery({
     queryKey: ["files", patientId],
@@ -196,6 +204,18 @@ export function PatientFiles({ patientId }: { patientId: string }) {
     onSettled: () => {
       if (inputRef.current) inputRef.current.value = "";
     },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: { fileId: string; newName: string; newCategory: string }) => {
+      await updateFile({ data });
+    },
+    onSuccess: () => {
+      toast.success("File updated successfully");
+      setEditingFile(null);
+      void qc.invalidateQueries({ queryKey: ["files", patientId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteMutation = useMutation({
@@ -316,6 +336,14 @@ export function PatientFiles({ patientId }: { patientId: string }) {
               <ExternalLink className="h-4 w-4" />
             </a>
             {canEditClinical && (
+              <>
+              <button
+                onClick={() => setEditingFile({ id: f.id, name: f.file_name, category: f.category })}
+                className="text-muted-foreground transition hover:text-primary"
+                aria-label={`Edit ${f.file_name}`}
+              >
+                <Edit2 className="h-4 w-4" />
+              </button>
               <button
                 onClick={() => deleteMutation.mutate(f.id)}
                 className="text-muted-foreground transition hover:text-destructive"
@@ -323,10 +351,67 @@ export function PatientFiles({ patientId }: { patientId: string }) {
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              </>
             )}
           </div>
         </div>
       ))}
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingFile} onOpenChange={(open) => !open && setEditingFile(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit File Details</DialogTitle>
+          </DialogHeader>
+          {editingFile && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="file-name">File Name</Label>
+                <Input
+                  id="file-name"
+                  value={editingFile.name}
+                  onChange={(e) => setEditingFile({ ...editingFile, name: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Category</Label>
+                <Select
+                  value={editingFile.category}
+                  onValueChange={(val) => setEditingFile({ ...editingFile, category: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              disabled={updateMutation.isPending || !editingFile?.name.trim()}
+              onClick={() => {
+                if (editingFile) {
+                  updateMutation.mutate({
+                    fileId: editingFile.id,
+                    newName: editingFile.name.trim(),
+                    newCategory: editingFile.category,
+                  });
+                }
+              }}
+            >
+              {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
