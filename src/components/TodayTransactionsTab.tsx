@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -22,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Printer, Trash2 } from "lucide-react";
+import { CreditCard, Printer, Trash2, Edit } from "lucide-react";
 import logo from "@/assets/physio-life-logo.png";
 
 interface TodayTransactionsTabProps {
@@ -43,6 +46,47 @@ export function TodayTransactionsTab({
   const [filterPatient, setFilterPatient] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTherapist, setFilterTherapist] = useState("all");
+
+  const qc = useQueryClient();
+  const [editInvoice, setEditInvoice] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ description: "", department_id: "none", therapist_id: "none" });
+
+  const { data: departments } = useQuery({
+    queryKey: ["clinic_departments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clinic_departments").select("*").order("created_at");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const updateInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!editInvoice) return;
+      const { error } = await supabase.from("invoices").update({
+        description: editForm.description,
+        department_id: editForm.department_id === "none" ? null : editForm.department_id,
+        therapist_id: editForm.therapist_id === "none" ? null : editForm.therapist_id,
+      }).eq("id", editInvoice.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(lang === "ar" ? "تم تعديل المعاملة بنجاح" : "Transaction updated successfully");
+      setEditInvoice(null);
+      qc.invalidateQueries({ queryKey: ["today_invoices"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openEdit = (invoice: any) => {
+    setEditInvoice(invoice);
+    setEditForm({
+      description: invoice.description || "",
+      department_id: invoice.department_id || "none",
+      therapist_id: invoice.therapist_id || "none",
+    });
+  };
+
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["today_invoices", startDate, endDate],
@@ -331,7 +375,6 @@ export function TodayTransactionsTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{lang === "ar" ? "رقم الفاتورة" : "Invoice #"}</TableHead>
                     <TableHead>{lang === "ar" ? "التاريخ والوقت" : "Date & Time"}</TableHead>
                     <TableHead>{lang === "ar" ? "المريض" : "Patient"}</TableHead>
                     <TableHead>{lang === "ar" ? "الوصف / القسم / المعالج" : "Description / Dept / Therapist"}</TableHead>
@@ -349,10 +392,7 @@ export function TodayTransactionsTab({
                       staffList.find((s) => s.id === i.therapist_id)?.full_name || "-";
                     return (
                       <TableRow key={i.id}>
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {i.invoice_number}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                                                <TableCell className="whitespace-nowrap">
                           {new Date(i.issue_date).toLocaleDateString("en-GB")}
                           <br />
                           <span className="text-xs text-muted-foreground">
@@ -401,9 +441,18 @@ export function TodayTransactionsTab({
                         </TableCell>
                         <TableCell className="text-end whitespace-nowrap">
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onPay && onPay(i, remaining)}
+    variant="ghost"
+    size="icon"
+    onClick={() => openEdit(i)}
+    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+    title={lang === "ar" ? "تعديل البيانات" : "Edit details"}
+  >
+    <Edit className="h-4 w-4" />
+  </Button>
+  <Button
+    variant="ghost"
+    size="icon"
+    onClick={() => onPay && onPay(i, remaining)}
                             disabled={remaining <= 0}
                             className="text-green-600 hover:text-green-700 hover:bg-green-50"
                             title="Receive Payment"
@@ -484,8 +533,7 @@ export function TodayTransactionsTab({
           <thead>
             <tr className="border-b-2 border-[#0f766e]">
               <th className="py-3 px-2 text-gray-700 font-bold">Time</th>
-              <th className="py-3 px-2 text-gray-700 font-bold">No.</th>
-              <th className="py-3 px-2 text-gray-700 font-bold">Patient</th>
+                            <th className="py-3 px-2 text-gray-700 font-bold">Patient</th>
               <th className="py-3 px-2 text-gray-700 font-bold">Therapist</th>
               <th className="py-3 px-2 text-gray-700 font-bold">Status</th>
               <th className="py-3 px-2 text-right text-gray-700 font-bold">Total</th>
@@ -502,8 +550,7 @@ export function TodayTransactionsTab({
                   <td className="py-3 px-2 text-gray-600 font-medium whitespace-nowrap">
                     {new Date(i.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}
                   </td>
-                  <td className="py-3 px-2 font-medium">#{i.invoice_number || i.id.split("-")[0]}</td>
-                  <td className="py-3 px-2 font-bold text-gray-800">{i.patients?.full_name}</td>
+                                    <td className="py-3 px-2 font-bold text-gray-800">{i.patients?.full_name}</td>
                   <td className="py-3 px-2 text-gray-700">{therapistName}</td>
                   <td className="py-3 px-2">
                     {remaining <= 0 ? (
@@ -537,7 +584,70 @@ export function TodayTransactionsTab({
           </div>
         )}
       </div>
-    </>
+    
+      <Dialog open={!!editInvoice} onOpenChange={(open) => !open && setEditInvoice(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{lang === "ar" ? "تعديل بيانات المعاملة" : "Edit Transaction Details"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>{lang === "ar" ? "الوصف" : "Description"}</Label>
+              <Input
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{lang === "ar" ? "القسم" : "Department"}</Label>
+              <Select
+                value={editForm.department_id}
+                onValueChange={(val) => setEditForm({ ...editForm, department_id: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{lang === "ar" ? "بدون قسم" : "No Department"}</SelectItem>
+                  {departments?.map((d: any) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{lang === "ar" ? "المعالج" : "Therapist"}</Label>
+              <Select
+                value={editForm.therapist_id}
+                onValueChange={(val) => setEditForm({ ...editForm, therapist_id: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{lang === "ar" ? "بدون معالج" : "No Therapist"}</SelectItem>
+                  {staffList?.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditInvoice(null)}>
+              {lang === "ar" ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button onClick={() => updateInvoiceMutation.mutate()} disabled={updateInvoiceMutation.isPending}>
+              {lang === "ar" ? "حفظ التعديلات" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
+    </>
   );
 }
