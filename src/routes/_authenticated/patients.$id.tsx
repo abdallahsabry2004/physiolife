@@ -154,6 +154,7 @@ function PatientDetail() {
   const historyRecs = reportRecords.filter((r) => r.module === "history");
   const examRecs = reportRecords.filter((r) => r.module === "exam");
   const diagRecs = reportRecords.filter((r) => r.module === "diagnosis");
+  const treatmentRecs = reportRecords.filter((r) => r.module === "treatment");
 
   const [sessionDrafts, setSessionDrafts] = useState<Record<string, string>>({});
 
@@ -514,14 +515,33 @@ const painSeries = [...sessions]
               </div>
             )}
 
-            {/* Diagnosis & Plan Section */}
+            {/* Diagnosis Section */}
             {diagRecs.length > 0 && (
               <div className="mb-6">
                 <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
-                  3. Diagnosis & Treatment Plan
+                  3. Diagnosis
                 </h4>
                 <div className="space-y-4">
                   {diagRecs.map((r) => (
+                    <div key={r.id}>
+                      <p className="text-sm font-bold text-gray-800">{r.label}:</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-1">
+                        {r.value || "—"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Treatment Plan Section */}
+            {treatmentRecs.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
+                  4. Treatment Plan
+                </h4>
+                <div className="space-y-4">
+                  {treatmentRecs.map((r) => (
                     <div key={r.id}>
                       <p className="text-sm font-bold text-gray-800">{r.label}:</p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-1">
@@ -537,7 +557,7 @@ const painSeries = [...sessions]
             {sessions.length > 0 && (
               <div className="mb-6" style={{ pageBreakInside: "avoid" }}>
                 <h4 className="text-xl font-bold text-[#0f766e] border-b-2 border-gray-100 pb-2 mb-4">
-                  4. Recent Treatment Sessions
+                  5. Recent Treatment Sessions
                 </h4>
                 <div className="space-y-4">
                   {sessions.slice(0, 3).map((s) => (
@@ -818,7 +838,8 @@ const painSeries = [...sessions]
         <TabsList className="flex h-auto flex-wrap justify-start print:hidden">
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="exam">Examination</TabsTrigger>
-          <TabsTrigger value="diagnosis">Diagnosis & Plan</TabsTrigger>
+          <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
+          <TabsTrigger value="treatment">Treatment</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="body">Body chart</TabsTrigger>
           <TabsTrigger value="progress">Progress</TabsTrigger>
@@ -849,7 +870,14 @@ const painSeries = [...sessions]
           <ClinicalModule
             patientId={id}
             module="diagnosis"
-            title="Diagnosis, goals and treatment plan"
+            title="Diagnosis"
+          />
+        </TabsContent>
+        <TabsContent value="treatment" className="mt-6">
+          <ClinicalModule
+            patientId={id}
+            module="treatment"
+            title="Treatment Plan"
           />
         </TabsContent>
 
