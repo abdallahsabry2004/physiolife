@@ -34,6 +34,13 @@ interface TodayTransactionsTabProps {
   staffList?: { id: string; full_name: string }[];
 }
 
+const toLocalISOString = (date = new Date()) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export function TodayTransactionsTab({
   onPay,
   onDelete,
@@ -41,8 +48,8 @@ export function TodayTransactionsTab({
 }: TodayTransactionsTabProps) {
   const { lang } = useI18n();
   const { user } = useAuth();
-  const [startDate, setStartDate] = useState(new Date().toLocaleDateString("en-CA"));
-  const [endDate, setEndDate] = useState(new Date().toLocaleDateString("en-CA"));
+  const [startDate, setStartDate] = useState(() => toLocalISOString());
+  const [endDate, setEndDate] = useState(() => toLocalISOString());
   const [filterPatient, setFilterPatient] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTherapist, setFilterTherapist] = useState("all");
@@ -91,9 +98,6 @@ export function TodayTransactionsTab({
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["today_invoices", startDate, endDate],
     queryFn: async () => {
-      const start = new Date(`${startDate}T00:00:00`);
-      const end = new Date(`${endDate}T23:59:59.999`);
-
       const { data, error } = await supabase
         .from("invoices")
         .select(
@@ -104,8 +108,8 @@ export function TodayTransactionsTab({
           payments ( amount )
         `,
         )
-        .gte("issue_date", start.toISOString())
-        .lte("issue_date", end.toISOString())
+        .gte("issue_date", startDate)
+        .lte("issue_date", endDate)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
