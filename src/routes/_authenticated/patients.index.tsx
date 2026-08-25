@@ -5,6 +5,7 @@ import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { logActivityAsync } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ const emptyForm = {
 
 function PatientsPage() {
   const { user, fullName, isTrainee } = useAuth();
+  const { t } = useI18n();
   const qc = useQueryClient();
 
   const { data: categories = [] } = useQuery({
@@ -169,7 +171,7 @@ function PatientsPage() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Patient registered");
+      toast.success(t("pt.registeredSuccess"));
       setForm(emptyForm);
       setOpen(false);
       void qc.invalidateQueries({ queryKey: ["patients"] });
@@ -181,21 +183,21 @@ function PatientsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Patients</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("pt.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {data?.total ?? 0} permanent records · instant search by name, phone or ID
+            {data?.total ?? 0} {t("pt.subtitle")}
           </p>
         </div>
         {!isTrainee && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
-                <UserPlus className="mr-2 h-4 w-4" /> Register patient
+                <UserPlus className="mx-2 h-4 w-4" /> {t("pt.register")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Register a new patient</DialogTitle>
+                <DialogTitle>{t("pt.registerTitle")}</DialogTitle>
               </DialogHeader>
               <form
                 className="space-y-4"
@@ -205,7 +207,7 @@ function PatientsPage() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="full_name">Full name</Label>
+                  <Label htmlFor="full_name">{t("pt.fullName")}</Label>
                   <Input
                     id="full_name"
                     value={form.full_name}
@@ -215,23 +217,23 @@ function PatientsPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Gender</Label>
+                    <Label>{t("pt.gender")}</Label>
                     <Select
                       value={form.gender}
                       onValueChange={(v) => setForm({ ...form, gender: v })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select" />
+                        <SelectValue placeholder={t("pt.select")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="male">{t("pt.male")}</SelectItem>
+                        <SelectItem value="female">{t("pt.female")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
+                  <Label htmlFor="category">{t("pt.category")}</Label>
                   <Input
                     id="category"
                     list="patient_categories_list"
@@ -246,7 +248,7 @@ function PatientsPage() {
                 </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="age">Age</Label>
+                    <Label htmlFor="age">{t("pt.age")}</Label>
                     <Input
                       id="age"
                       type="number"
@@ -255,7 +257,7 @@ function PatientsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone">{t("pt.phone")}</Label>
                     <Input
                       id="phone"
                       value={form.phone}
@@ -263,7 +265,7 @@ function PatientsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="occupation">Occupation</Label>
+                    <Label htmlFor="occupation">{t("pt.occupation")}</Label>
                     <Input
                       id="occupation"
                       value={form.occupation}
@@ -272,7 +274,7 @@ function PatientsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="address">Patient Address</Label>
+                  <Label htmlFor="address">{t("pt.patientAddress")}</Label>
                   <Input
                     id="address"
                     value={form.patient_address}
@@ -280,17 +282,17 @@ function PatientsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="diagnosis">Working diagnosis</Label>
+                  <Label htmlFor="diagnosis">{t("pt.diagnosis")}</Label>
                   {/* استخدام مكوّن الإكمال التلقائي الطبي بدلاً من Input[cite: 1] */}
                   <MedicalAutocomplete
                     value={form.diagnosis}
                     onChange={(val) => setForm({ ...form, diagnosis: val })}
-                    placeholder="e.g. Low back pain"
+                    placeholder={t("pt.diagnosisPlaceholder")}
                   />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="referral">Referral source</Label>
+                    <Label htmlFor="referral">{t("pt.referralSource")}</Label>
                     <Input
                       id="referral"
                       value={form.referral_source}
@@ -298,7 +300,7 @@ function PatientsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="referralPhone">Referral phone number</Label>
+                    <Label htmlFor="referralPhone">{t("pt.referralPhone")}</Label>
                     <Input
                       id="referralPhone"
                       value={form.referral_phone}
@@ -307,7 +309,7 @@ function PatientsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="referralAddress">Referral Address</Label>
+                  <Label htmlFor="referralAddress">{t("pt.referralAddress")}</Label>
                   <Input
                     id="referralAddress"
                     value={form.referral_address}
@@ -329,7 +331,7 @@ function PatientsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="pl-9"
-              placeholder="Search name, phone or patient ID…"
+              placeholder={t("pt.searchPlaceholder")}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -346,10 +348,10 @@ function PatientsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="discharged">Discharged</SelectItem>
-                <SelectItem value="on_hold">On hold</SelectItem>
+                <SelectItem value="all">{t("pt.allStatuses")}</SelectItem>
+                <SelectItem value="active">{t("pt.active")}</SelectItem>
+                <SelectItem value="discharged">{t("pt.discharged")}</SelectItem>
+                <SelectItem value="on_hold">{t("pt.onHold")}</SelectItem>
               </SelectContent>
             </Select>
           ) : (
@@ -371,18 +373,18 @@ function PatientsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All genders</SelectItem>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="all">{t("pt.allGenders")}</SelectItem>
+              <SelectItem value="male">{t("pt.male")}</SelectItem>
+              <SelectItem value="female">{t("pt.female")}</SelectItem>
             </SelectContent>
           </Select>
         </CardContent>
       </Card>
 
       <div className="grid gap-3">
-        {isLoading && !data && <p className="text-sm text-muted-foreground">Loading patients…</p>}
+        {isLoading && !data && <p className="text-sm text-muted-foreground">{t("pt.loading")}</p>}
         {!isLoading && data?.items?.length === 0 && (
-          <p className="text-sm text-muted-foreground">No patients match your search.</p>
+          <p className="text-sm text-muted-foreground">{t("pt.noPatients")}</p>
         )}
         {data?.items?.map((p) => (
           <Link
@@ -394,12 +396,12 @@ function PatientsPage() {
             <div>
               <p className="font-semibold">{p.full_name}</p>
               <p className="text-xs text-muted-foreground">
-                {p.code} · {p.gender ?? "—"} · {p.age ?? "—"} yrs · {p.phone ?? "no phone"}
+                {p.code} · {p.gender === "male" ? t("pt.male") : p.gender === "female" ? t("pt.female") : "—"} · {p.age ?? "—"} {t("pt.yrs")} · {p.phone ?? t("pt.noPhone")}
               </p>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="max-w-60 truncate">{p.diagnosis ?? "No diagnosis yet"}</span>
-              <Badge variant={p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
+              <span className="max-w-60 truncate">{p.diagnosis ?? t("pt.noDiagnosis")}</span>
+              <Badge variant={p.status === "active" ? "default" : "secondary"}>{p.status === "active" ? t("pt.active") : p.status === "discharged" ? t("pt.discharged") : p.status === "on_hold" ? t("pt.onHold") : p.status}</Badge>
             </div>
           </Link>
         ))}
@@ -408,7 +410,7 @@ function PatientsPage() {
       {data && data.total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Rows per page:</span>
+            <span className="text-sm text-muted-foreground">{t("pt.rowsPerPage")}</span>
             <Select
               value={String(pageSize)}
               onValueChange={(v) => {
@@ -430,7 +432,7 @@ function PatientsPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">
-              Page {page} of {totalPages}
+              {t("pt.pageOf").replace("{page}", String(page)).replace("{totalPages}", String(totalPages))}
             </span>
             <div className="flex gap-2">
               <Button
@@ -439,7 +441,7 @@ function PatientsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                <ChevronLeft className="h-4 w-4 mx-1" /> {t("pt.prev")}
               </Button>
               <Button
                 variant="outline"
@@ -447,7 +449,7 @@ function PatientsPage() {
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page >= totalPages}
               >
-                Next <ChevronRight className="h-4 w-4 ml-1" />
+                {t("pt.next")} <ChevronRight className="h-4 w-4 mx-1" />
               </Button>
             </div>
           </div>
