@@ -420,10 +420,10 @@ export const updatePatientFile = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
-    // 1. Fetch file record
+    // 1. Fetch file record, including patient details and storage account
     const { data: row, error } = await supabase
       .from("patient_files")
-      .select("id, drive_file_id")
+      .select("*, patients(code, full_name)")
       .eq("id", data.fileId)
       .single();
 
@@ -434,8 +434,48 @@ export const updatePatientFile = createServerFn({ method: "POST" })
       try {
         const auth = await getGoogleAuth();
         const { token } = await auth.getAccessToken();
+        
+        let url = `https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`;
+        
+        // If category changed, we need to move the file in Drive
+        if (row.category !== data.newCategory) {
+           // Get the storage account root
+           let account = null;
+           if (row.storage_account_id) {
+             const r = await supabase.from("storage_accounts").select("root_folder_id").eq("id", row.storage_account_id).single();
+             account = r.data;
+           } else {
+             const r = await supabase.from("storage_accounts").select("root_folder_id").eq("is_active", true).single();
+             account = r.data;
+           }
+           
+           const patient = Array.isArray(row.patients) ? row.patients[0] : row.patients;
+           if (patient) {
+             const rootId = account?.root_folder_id;
+             const patientFolderId = await ensureFolder(
+               auth,
+               `${patient.code} - ${patient.full_name}`,
+               rootId ?? undefined
+             );
+             const newCategoryFolderId = await ensureFolder(auth, data.newCategory, patientFolderId);
+             
+             // Get current parents of the file to remove them
+             const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}?fields=parents`, {
+               headers: { Authorization: `Bearer ${token}` }
+             });
+             if (fileRes.ok) {
+               const fileData = await fileRes.json();
+               const previousParents = fileData.parents?.join(",") || "";
+               
+               url += `?addParents=${newCategoryFolderId}`;
+               if (previousParents) {
+                 url += `&removeParents=${previousParents}`;
+               }
+             }
+           }
+        }
 
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
+        const res = await fetch(url, {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -447,10 +487,10 @@ export const updatePatientFile = createServerFn({ method: "POST" })
         });
 
         if (!res.ok) {
-          console.error("Rename in Drive failed:", await res.text());
+          console.error("Update in Drive failed:", await res.text());
         }
       } catch (e) {
-        console.error("Drive rename failed", e);
+        console.error("Drive update failed", e);
       }
     }
 
