@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -108,6 +108,35 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     },
     onSuccess: () => {
       toast.success("Saved");
+      void qc.invalidateQueries({ queryKey: recordsKey });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  
+  const moveItem = useMutation({
+    mutationFn: async ({ id, direction }: { id: string; direction: "up" | "down" }) => {
+      const index = records.findIndex((r) => r.id === id);
+      if (index === -1) return;
+      
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= records.length) return;
+      
+      const newRecords = [...records];
+      [newRecords[index], newRecords[targetIndex]] = [newRecords[targetIndex], newRecords[index]];
+      
+      const updates = newRecords.map((r, idx) => ({
+        id: r.id,
+        sort_order: (idx + 1) * 10,
+      }));
+      
+      await Promise.all(
+        updates.map(u => 
+          supabase.from("patient_records").update({ sort_order: u.sort_order }).eq("id", u.id)
+        )
+      );
+    },
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: recordsKey });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -221,13 +250,31 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                   {r.label}
                 </Badge>
                 {canEditClinical && (
-                  <button
-                    onClick={() => removeItem.mutate(r.id)}
-                    className="text-muted-foreground transition hover:text-destructive print:hidden"
-                    aria-label={`Remove ${r.label}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2 print:hidden">
+                    <button
+                      onClick={() => moveItem.mutate({ id: r.id, direction: "up" })}
+                      disabled={records.indexOf(r) === 0}
+                      className="text-muted-foreground transition hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground"
+                      aria-label="Move up"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => moveItem.mutate({ id: r.id, direction: "down" })}
+                      disabled={records.indexOf(r) === records.length - 1}
+                      className="text-muted-foreground transition hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground"
+                      aria-label="Move down"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => removeItem.mutate(r.id)}
+                      className="text-muted-foreground transition hover:text-destructive ml-2"
+                      aria-label={`Remove ${r.label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
               {/*[cite: 1] تم استبدال الـ Textarea بمكون الاقتراحات الطبية */}
