@@ -46,7 +46,7 @@ import logo from "@/assets/physio-life-logo.png";
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({
     meta: [
-      { title: lang === "ar" ? "الفواتير والمدفوعات — سجلات فيزيو لايف" : "Billing & Payments — Physio Life EMR" },
+      { title: "Billing & Payments — Physio Life EMR" },
       {
         name: "description",
         content:
@@ -820,7 +820,7 @@ function BillingPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{lang === "ar" ? "الفواتير والمدفوعات" : "Billing & Payments"}</h1>
             <p className="text-sm text-muted-foreground">
-              Outstanding total balance:{" "}
+              {lang === "ar" ? "إجمالي الرصيد غير المدفوع: " : "Outstanding total balance: "}
               <span className="font-bold text-foreground">
                 {lang === "ar" ? "ج.م " : "EGP "}{totalOutstanding.toLocaleString()}
               </span>
@@ -1123,7 +1123,7 @@ function BillingPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="ps-9 bg-card"
-                placeholder="Search invoices & payments by patient name..."
+                placeholder={lang === "ar" ? "ابحث في الفواتير والمدفوعات باسم المريض..." : "Search invoices & payments by patient name..."}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
               />
@@ -1173,7 +1173,7 @@ function BillingPage() {
                           </span>
                           {paidAmount > 0 && !isPaid && (
                             <span className="text-xs text-primary font-medium">
-                              Paid: {paidAmount} | Rem: {remaining}
+                              {lang === "ar" ? `المدفوع: ${paidAmount} | المتبقي: ${remaining}` : `Paid: ${paidAmount} | Rem: ${remaining}`}
                             </span>
                           )}
                         </div>
@@ -1189,7 +1189,7 @@ function BillingPage() {
                                   : ""
                             }
                           >
-                            {isPaid ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid"}
+                            {isPaid ? (lang === "ar" ? "مدفوع" : "Paid") : paidAmount > 0 ? (lang === "ar" ? "مدفوع جزئياً" : "Partial") : (lang === "ar" ? "غير مدفوع" : "Unpaid")}
                           </Badge>
 
                           {canBill && !isPaid && (
@@ -1204,9 +1204,7 @@ function BillingPage() {
                                   type: "full",
                                 })
                               }
-                            >
-                              Pay
-                            </Button>
+                            >{lang === "ar" ? "دفع" : "Pay"}</Button>
                           )}
 
                           <Button
@@ -1482,7 +1480,7 @@ function BillingPage() {
                                       {i.description || "General"} · {i.issue_date}
                                     </p>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                      Total: {lang === "ar" ? "ج.م " : "EGP "}{i.total} | Remaining: {lang === "ar" ? "ج.م " : "EGP "}{remaining}
+                                      {lang === "ar" ? "الإجمالي: " : "Total: "}{lang === "ar" ? "ج.م " : "EGP "}{i.total} | {lang === "ar" ? "المتبقي: " : "Remaining: "}{lang === "ar" ? "ج.م " : "EGP "}{remaining}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-3">
@@ -1496,7 +1494,7 @@ function BillingPage() {
                                             : ""
                                       }
                                     >
-                                      {isPaid ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid"}
+                                      {isPaid ? (lang === "ar" ? "مدفوع" : "Paid") : paidAmount > 0 ? (lang === "ar" ? "مدفوع جزئياً" : "Partial") : (lang === "ar" ? "غير مدفوع" : "Unpaid")}
                                     </Badge>
                                   </div>
                                 </div>
@@ -1518,7 +1516,7 @@ function BillingPage() {
                               className="flex justify-between items-center border p-3 rounded text-sm bg-secondary/10"
                             >
                               <div>
-                                <p className="font-medium">Paid on {p.paid_on}</p>
+                                <p className="font-medium">{lang === "ar" ? `تم الدفع في ${p.paid_on}` : `Paid on ${p.paid_on}`}</p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                   Method: {p.method}
                                 </p>
