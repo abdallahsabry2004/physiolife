@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2, Printer } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, AlertTriangle, Download, Loader2, Printer, CalendarPlus, CalendarMinus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Line,
@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { logActivityAsync } from "@/lib/logger";
 import { deleteAllPatientDriveFiles } from "@/lib/drive.functions";
 import { ClinicalModule } from "@/components/ClinicalModule";
@@ -22,6 +23,7 @@ import { PatientFiles } from "@/components/PatientFiles";
 import { PatientExercises } from "@/components/PatientExercises";
 import { PatientMeasurements } from "@/components/PatientMeasurements";
 import { PatientAssessments } from "@/components/PatientAssessments";
+import { PatientVisits } from "@/components/PatientVisits";
 import { ProfessionalBodyChart } from "@/components/ProfessionalBodyChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +60,7 @@ function PatientDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const { user, fullName, canEditClinical, canEditRegistration } = useAuth();
+  const { lang } = useI18n();
   const qc = useQueryClient();
   const deleteDriveFiles = useServerFn(deleteAllPatientDriveFiles);
 
@@ -68,6 +71,47 @@ function PatientDetail() {
   const [deletePassword, setDeletePassword] = useState("");
 
   const [showReportPreview, setShowReportPreview] = useState(false);
+
+  const { data: todayVisit } = useQuery({
+    queryKey: ["today_visit", id],
+    queryFn: async () => {
+      const today = new Date();
+      const start = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+      const end = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+      const { data, error } = await supabase
+        .from("patient_records")
+        .select("id")
+        .eq("patient_id", id)
+        .eq("module", "visit")
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  
+  const cancelVisit = useMutation({
+    mutationFn: async () => {
+      if (!todayVisit?.id) return;
+      const { error } = await supabase.from("patient_records").delete().eq("id", todayVisit.id);
+      if (error) throw error;
+      await logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "CANCEL_VISIT",
+        entity: `Patient ID: ${id}`,
+      });
+    },
+    onSuccess: () => {
+      toast.success(lang === "ar" ? "تم إلغاء الزيارة بنجاح" : "Visit cancelled successfully");
+      qc.invalidateQueries({ queryKey: ["today_visit", id] });
+      qc.invalidateQueries({ queryKey: ["patient_visits", id] });
+      qc.invalidateQueries({ queryKey: ["today_visit", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
 
   const { data: patient } = useQuery({
     queryKey: ["patient", id],
@@ -165,6 +209,31 @@ function PatientDetail() {
       void qc.invalidateQueries({ queryKey: ["patient", id] });
       void qc.invalidateQueries({ queryKey: ["patients"] });
       void qc.invalidateQueries({ queryKey: ["patients-min"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+
+  const logVisit = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("patient_records").insert({
+        patient_id: id,
+        module: "visit",
+        label: "Patient Visit",
+        recorded_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      
+      await logActivityAsync({
+        user_id: user?.id,
+        user_name: fullName,
+        action: "LOG_VISIT",
+        entity: `Patient ID: ${id}`,
+      });
+    },
+    onSuccess: () => {
+      toast.success(lang === "ar" ? "تم تسجيل الزيارة بنجاح" : "Visit logged successfully");
+      qc.invalidateQueries({ queryKey: ["patient_visits", id] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -567,7 +636,19 @@ const painSeries = [...sessions]
             </Badge>
           )}
 
-                    <Button variant="outline" onClick={() => setShowReportPreview(true)}>
+                    
+                    {todayVisit ? (
+            <Button variant="destructive" onClick={() => cancelVisit.mutate()} disabled={cancelVisit.isPending}>
+              {cancelVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarMinus className="mr-2 h-4 w-4" />}
+              {lang === "ar" ? "إلغاء تسجيل الزيارة" : "Cancel Visit Log"}
+            </Button>
+          ) : (
+            <Button variant="default" onClick={() => logVisit.mutate()} disabled={logVisit.isPending}>
+              {logVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
+              {lang === "ar" ? "تسجيل زيارة" : "Log Visit"}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setShowReportPreview(true)}>
             <Printer className="mr-2 h-4 w-4" /> Preview & Print Report
           </Button>
 
@@ -744,7 +825,8 @@ const painSeries = [...sessions]
           <TabsTrigger value="measures">Measurements</TabsTrigger>
           <TabsTrigger value="questionnaires">Questionnaires</TabsTrigger>
           <TabsTrigger value="program">Home program</TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
+                    <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="visits">Visits</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="mt-6">
@@ -946,8 +1028,11 @@ const painSeries = [...sessions]
           <PatientExercises patientId={id} />
         </TabsContent>
 
-        <TabsContent value="files" className="mt-6">
+                <TabsContent value="files" className="mt-6">
           <PatientFiles patientId={id} />
+        </TabsContent>
+        <TabsContent value="visits" className="mt-6">
+          <PatientVisits patientId={id} patientName={patient.full_name} />
         </TabsContent>
       </Tabs>
     </div>
