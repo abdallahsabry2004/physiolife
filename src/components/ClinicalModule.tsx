@@ -4,7 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { logActivityAsync } from "@/lib/logger"; 
+import { logActivityAsync } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { MedicalAutocomplete } from "@/components/ui/MedicalAutocomplete"; //[ci
 
 type Props = {
   patientId: string;
-  module: "history" | "exam" | "diagnosis" | "session";
+  module: "history" | "exam" | "diagnosis" | "session" | "treatment";
   sessionId?: string;
   title: string;
   description?: string;
@@ -71,13 +71,13 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
         recorded_by: user?.id ?? null,
       });
       if (error) throw error;
-      
+
       logActivityAsync({
         user_id: user?.id,
         user_name: fullName,
         action: "ADD_CLINICAL_FIELD",
         entity: `Patient Record (${module})`,
-        details: { patient_id: patientId, session_id: sessionId, label }
+        details: { patient_id: patientId, session_id: sessionId, label },
       });
     },
     onSuccess: () => {
@@ -89,7 +89,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
   const saveValue = useMutation({
     mutationFn: async ({ id, value }: { id: string; value: string }) => {
       const oldRecord = records.find((r) => r.id === id);
-      
+
       const { error } = await supabase.from("patient_records").update({ value }).eq("id", id);
       if (error) throw error;
 
@@ -98,12 +98,12 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
         user_name: fullName,
         action: "UPDATE_CLINICAL_NOTES",
         entity: `Patient Record (${module})`,
-        details: { 
-          patient_id: patientId, 
-          label: oldRecord?.label, 
-          old_value: oldRecord?.value || "(empty)", 
-          new_value: value 
-        }
+        details: {
+          patient_id: patientId,
+          label: oldRecord?.label,
+          old_value: oldRecord?.value || "(empty)",
+          new_value: value,
+        },
       });
     },
     onSuccess: () => {
@@ -124,11 +124,11 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
         user_name: fullName,
         action: "DELETE_CLINICAL_FIELD",
         entity: `Patient Record (${module})`,
-        details: { 
-          patient_id: patientId, 
-          label: oldRecord?.label, 
-          deleted_value: oldRecord?.value 
-        }
+        details: {
+          patient_id: patientId,
+          label: oldRecord?.label,
+          deleted_value: oldRecord?.value,
+        },
       });
     },
     onSuccess: () => {
@@ -141,7 +141,7 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     const label = custom.trim();
     if (!label) return;
     setCustom("");
-    
+
     await supabase.from("clinical_fields").insert({
       module,
       section: "Custom",
@@ -187,11 +187,11 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
             <div className="flex gap-2">
               {/*[cite: 1] تم دمج مكوّن الإكمال التلقائي هنا لتسهيل إدخال عنصر مخصص */}
               <div className="flex-1">
-                 <MedicalAutocomplete
+                <MedicalAutocomplete
                   value={custom}
                   onChange={(val) => setCustom(val)}
                   placeholder="Or type a custom item…"
-                 />
+                />
               </div>
               <Button onClick={() => void addCustom()}>
                 <Plus className="mr-1 h-4 w-4" /> Add
@@ -208,10 +208,18 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
           </p>
         )}
         {records.map((r) => (
-          <Card key={r.id} className="print:border-none print:shadow-none print:bg-transparent overflow-visible">
+          <Card
+            key={r.id}
+            className="print:border-none print:shadow-none print:bg-transparent overflow-visible"
+          >
             <CardContent className="pt-6 print:p-0 print:py-1 overflow-visible">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <Badge variant="secondary" className="print:bg-transparent print:border print:border-gray-300 print:text-black">{r.label}</Badge>
+                <Badge
+                  variant="secondary"
+                  className="print:bg-transparent print:border print:border-gray-300 print:text-black"
+                >
+                  {r.label}
+                </Badge>
                 {canEditClinical && (
                   <button
                     onClick={() => removeItem.mutate(r.id)}
@@ -230,14 +238,14 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
                 </div>
               ) : (
                 <>
-                  <div 
+                  <div
                     className="print:hidden"
                     onBlur={(e) => {
                       if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                         const currentValue = drafts[r.id] ?? r.value ?? "";
-                         if ((r.value ?? "") !== currentValue) {
-                           saveValue.mutate({ id: r.id, value: currentValue });
-                         }
+                        const currentValue = drafts[r.id] ?? r.value ?? "";
+                        if ((r.value ?? "") !== currentValue) {
+                          saveValue.mutate({ id: r.id, value: currentValue });
+                        }
                       }
                     }}
                   >
@@ -260,5 +268,3 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     </div>
   );
 }
-
-
