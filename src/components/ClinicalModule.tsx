@@ -113,26 +113,27 @@ export function ClinicalModule({ patientId, module, sessionId, title, descriptio
     onError: (e: Error) => toast.error(e.message),
   });
 
+  
   const moveItem = useMutation({
     mutationFn: async ({ id, direction }: { id: string; direction: "up" | "down" }) => {
       const index = records.findIndex((r) => r.id === id);
       if (index === -1) return;
-
+      
       const targetIndex = direction === "up" ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= records.length) return;
-
+      
       const newRecords = [...records];
       [newRecords[index], newRecords[targetIndex]] = [newRecords[targetIndex], newRecords[index]];
-
+      
       const updates = newRecords.map((r, idx) => ({
         id: r.id,
         sort_order: (idx + 1) * 10,
       }));
-
+      
       await Promise.all(
-        updates.map((u) =>
-          supabase.from("patient_records").update({ sort_order: u.sort_order }).eq("id", u.id),
-        ),
+        updates.map(u => 
+          supabase.from("patient_records").update({ sort_order: u.sort_order }).eq("id", u.id)
+        )
       );
     },
     onSuccess: () => {
