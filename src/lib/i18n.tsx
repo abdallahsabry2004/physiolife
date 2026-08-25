@@ -130,6 +130,23 @@ const dict = {
   "pt.next": { en: "Next", ar: "التالي" },
   "pt.registeredSuccess": { en: "Patient registered", ar: "تم تسجيل المريض بنجاح" },
   "pt.yrs": { en: "yrs", ar: "سنة" },
+  // Patient Details Top Card
+  "pt.allPatients": { en: "All patients", ar: "كل المرضى" },
+  "pt.editPatientDetails": { en: "Edit Patient Details", ar: "تعديل بيانات المريض" },
+  "pt.cancelVisitLog": { en: "Cancel Visit Log", ar: "إلغاء تسجيل الزيارة" },
+  "pt.logVisit": { en: "Log Visit", ar: "تسجيل زيارة" },
+  "pt.previewPrintReport": { en: "Preview & Print Report", ar: "معاينة وطباعة التقرير" },
+  "pt.delete": { en: "Delete", ar: "حذف" },
+  "pt.permanentDelete": { en: "Permanent Delete Patient", ar: "حذف المريض نهائياً" },
+  "pt.deleteWarning": { 
+    en: "Are you absolutely sure you want to delete {name}? This action cannot be undone. All clinical records, sessions, and files associated with this patient will be permanently removed.", 
+    ar: "هل أنت متأكد تماماً من رغبتك في حذف {name}؟ لا يمكن التراجع عن هذا الإجراء. ستتم إزالة جميع السجلات السريرية والجلسات والملفات المرتبطة بهذا المريض نهائياً." 
+  },
+  "pt.enterPassword": { en: "Enter your password to confirm", ar: "أدخل كلمة المرور للتأكيد" },
+  "pt.cancel": { en: "Cancel", ar: "إلغاء" },
+  "pt.deletePatient": { en: "Delete patient", ar: "حذف المريض" },
+  "pt.loadingRecord": { en: "Loading record…", ar: "جاري تحميل السجل..." },
+
 
 } as const;
 
