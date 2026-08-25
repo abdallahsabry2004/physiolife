@@ -743,6 +743,7 @@ export type Database = {
         Row: {
           patient_address: string | null;
           age: number | null;
+          category: string | null;
           code: string;
           created_at: string;
           created_by: string | null;
@@ -769,6 +770,7 @@ export type Database = {
         Insert: {
           patient_address?: string | null;
           age?: number | null;
+          category?: string | null;
           code?: string;
           created_at?: string;
           created_by?: string | null;
@@ -796,6 +798,7 @@ export type Database = {
         Update: {
           patient_address?: string | null;
           age?: number | null;
+          category?: string | null;
           code?: string;
           created_at?: string;
           created_by?: string | null;
