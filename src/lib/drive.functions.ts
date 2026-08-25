@@ -412,3 +412,55 @@ export const getDriveQuota = createServerFn({ method: "GET" })
       return { limit: 0, usage: 0 };
     }
   });
+
+
+export const updatePatientFile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { fileId: string; newName: string; newCategory: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+
+    // 1. Fetch file record
+    const { data: row, error } = await supabase
+      .from("patient_files")
+      .select("id, drive_file_id")
+      .eq("id", data.fileId)
+      .single();
+
+    if (error || !row) throw new Error("File not found.");
+
+    // 2. Update in Google Drive if exists
+    if (row.drive_file_id) {
+      try {
+        const auth = await getGoogleAuth();
+        const { token } = await auth.getAccessToken();
+
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${row.drive_file_id}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: data.newName,
+          }),
+        });
+
+        if (!res.ok) {
+          console.error("Rename in Drive failed:", await res.text());
+        }
+      } catch (e) {
+        console.error("Drive rename failed", e);
+      }
+    }
+
+    // 3. Update DB record
+    const { error: updateError } = await supabase
+      .from("patient_files")
+      .update({ file_name: data.newName, category: data.newCategory })
+      .eq("id", data.fileId);
+
+    if (updateError) throw updateError;
+
+    return { ok: true };
+  });
