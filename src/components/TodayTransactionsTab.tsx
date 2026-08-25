@@ -47,7 +47,7 @@ export function TodayTransactionsTab({
   staffList = [],
 }: TodayTransactionsTabProps) {
   const { lang } = useI18n();
-  const { user } = useAuth();
+  const { user, fullName } = useAuth();
   const [startDate, setStartDate] = useState(() => toLocalISOString());
   const [endDate, setEndDate] = useState(() => toLocalISOString());
   const [filterPatient, setFilterPatient] = useState("");
@@ -505,7 +505,7 @@ export function TodayTransactionsTab({
           <div className="text-right">
             <h3 className="text-2xl font-bold text-gray-800 tracking-wider">FINANCIAL TRANSACTIONS</h3>
             <p className="text-gray-500 font-medium mt-2">
-              Printed By: {user?.user_metadata?.full_name || "Staff"}<br/>
+              Printed By: {fullName || user?.user_metadata?.full_name || user?.email || "Staff"}<br/>
               Period: {isSameDay ? startDate : `${startDate} to ${endDate}`}
             </p>
             <p className="text-gray-500 font-medium">
@@ -536,9 +536,9 @@ export function TodayTransactionsTab({
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b-2 border-[#0f766e]">
-              <th className="py-3 px-2 text-gray-700 font-bold">Time</th>
+              <th className="py-3 px-2 text-gray-700 font-bold">Date & Time</th>
                             <th className="py-3 px-2 text-gray-700 font-bold">Patient</th>
-              <th className="py-3 px-2 text-gray-700 font-bold">Therapist</th>
+              <th className="py-3 px-2 text-gray-700 font-bold">Description / Dept / Therapist</th>
               <th className="py-3 px-2 text-gray-700 font-bold">Status</th>
               <th className="py-3 px-2 text-right text-gray-700 font-bold">Total</th>
               <th className="py-3 px-2 text-right text-gray-700 font-bold">Paid</th>
@@ -552,10 +552,16 @@ export function TodayTransactionsTab({
               return (
                 <tr key={i.id} className="border-b border-gray-100">
                   <td className="py-3 px-2 text-gray-600 font-medium whitespace-nowrap">
-                    {new Date(i.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(i.issue_date).toLocaleDateString("en-GB")}<br/><span className="text-xs text-gray-500">{new Date(i.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
                   </td>
                                     <td className="py-3 px-2 font-bold text-gray-800">{i.patients?.full_name}</td>
-                  <td className="py-3 px-2 text-gray-700">{therapistName}</td>
+                  <td className="py-3 px-2 text-gray-700">
+    <span className="block font-medium">{i.description || "-"}</span>
+    <span className="text-xs text-gray-500">
+      {i.clinic_departments?.name ? `${i.clinic_departments.name} • ` : ""}
+      {i.therapist_id ? `Dr. ${therapistName}` : ""}
+    </span>
+  </td>
                   <td className="py-3 px-2">
                     {remaining <= 0 ? (
                       <span className="text-green-600 font-bold">Paid</span>
