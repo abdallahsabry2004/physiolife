@@ -107,7 +107,7 @@ const dict = {
   "pt.phone": { en: "Phone", ar: "رقم الهاتف" },
   "pt.occupation": { en: "Occupation", ar: "المهنة" },
   "pt.patientAddress": { en: "Patient Address", ar: "عنوان المريض" },
-  "pt.diagnosis": { en: "Working diagnosis", ar: "التشخيص المبدئي" },
+  "pt.diagnosis": { en: "Complaint", ar: "الشكوى" },
   "pt.diagnosisPlaceholder": { en: "e.g. Low back pain", ar: "مثال: آلام أسفل الظهر" },
   "pt.referralSource": { en: "Referral source", ar: "مصدر التحويل" },
   "pt.referralPhone": { en: "Referral phone number", ar: "رقم هاتف المحوّل" },
