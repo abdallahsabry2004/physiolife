@@ -59,7 +59,7 @@ export const Route = createFileRoute("/_authenticated/patients/$id")({
 function PatientDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const { user, fullName, canEditClinical, canEditRegistration } = useAuth();
+  const { user, fullName, canEditClinical, canEditRegistration, canLogVisit } = useAuth();
   const { lang, t } = useI18n();
   const qc = useQueryClient();
   const deleteDriveFiles = useServerFn(deleteAllPatientDriveFiles);
@@ -109,6 +109,7 @@ function PatientDetail() {
       return { previousVisit };
     },
     mutationFn: async () => {
+      if (!canLogVisit) throw new Error("Unauthorized");
       if (!todayVisit?.id) return;
       const { error } = await supabase.from("patient_records").delete().eq("id", todayVisit.id);
       if (error) throw error;
@@ -247,6 +248,7 @@ function PatientDetail() {
       return { previousVisit };
     },
     mutationFn: async () => {
+      if (!canLogVisit) throw new Error("Unauthorized");
       const { error } = await supabase.from("patient_records").insert({
         patient_id: id,
         module: "visit",
@@ -704,16 +706,18 @@ const painSeries = [...sessions]
           )}
 
                     
-                    {todayVisit ? (
-            <Button variant="destructive" onClick={() => cancelVisit.mutate()} disabled={cancelVisit.isPending}>
-              {cancelVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarMinus className="mr-2 h-4 w-4" />}
-              {t("pt.cancelVisitLog")}
-            </Button>
-          ) : (
-            <Button variant="default" onClick={() => logVisit.mutate()} disabled={logVisit.isPending}>
-              {logVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
-              {t("pt.logVisit")}
-            </Button>
+          {canLogVisit && (
+            todayVisit ? (
+              <Button variant="destructive" onClick={() => cancelVisit.mutate()} disabled={cancelVisit.isPending}>
+                {cancelVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarMinus className="mr-2 h-4 w-4" />}
+                {t("pt.cancelVisitLog")}
+              </Button>
+            ) : (
+              <Button variant="default" onClick={() => logVisit.mutate()} disabled={logVisit.isPending}>
+                {logVisit.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
+                {t("pt.logVisit")}
+              </Button>
+            )
           )}
           <Button variant="outline" onClick={() => setShowReportPreview(true)}>
             <Printer className="mx-2 h-4 w-4" /> {t("pt.previewPrintReport")}
