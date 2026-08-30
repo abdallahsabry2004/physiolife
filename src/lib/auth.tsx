@@ -35,6 +35,7 @@ type AuthState = {
   isTrainee: boolean;
   canEditClinical: boolean;
   canEditRegistration: boolean;
+  canLogVisit: boolean;
   canBill: boolean;
   canViewPage: (page: PageKey) => boolean;
   signOut: () => Promise<void>;
@@ -174,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isTrainee,
     canEditClinical: !isTrainee && (isSuperAdmin || roles.includes("therapist")),
     canEditRegistration: !isTrainee && (isSuperAdmin || roles.includes("therapist") || roles.includes("receptionist")),
+    canLogVisit: !isTrainee && (isSuperAdmin || roles.includes("therapist") || roles.includes("receptionist") || roles.includes("assistant")),
     canBill: !isTrainee && (isSuperAdmin || (permissions?.can_access_billing ?? false)),
     canViewPage: (page: PageKey) => {
       // المتدرب لا يملك وصول لأي من هذه الصفحات
