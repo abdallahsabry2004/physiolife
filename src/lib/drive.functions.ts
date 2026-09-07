@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { OAuth2Client } from "google-auth-library";
 
@@ -53,6 +54,7 @@ export const initiateTraineeDriveUpload = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
+          "Origin": getRequest()?.headers.get("origin") || "https://ais-dev-j6xbcwdeii6aerqjadbqeq-179572165060.europe-west2.run.app",
         },
         body: JSON.stringify({
           name: data.fileName,
@@ -197,6 +199,7 @@ export const initiateDriveUpload = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
+          "Origin": getRequest()?.headers.get("origin") || "https://ais-dev-j6xbcwdeii6aerqjadbqeq-179572165060.europe-west2.run.app",
         },
         body: JSON.stringify({
           name: data.fileName,
@@ -247,6 +250,7 @@ export const initiateGenericDriveUpload = createServerFn({ method: "POST" })
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": data.mimeType,
+          "Origin": getRequest()?.headers.get("origin") || "https://ais-dev-j6xbcwdeii6aerqjadbqeq-179572165060.europe-west2.run.app",
         },
         body: JSON.stringify({
           name: data.fileName,
