@@ -23,6 +23,7 @@ const dict = {
   "nav.analytics": { en: "Analytics", ar: "التحليلات" },
   "nav.financialReports": { en: "Financial Reports", ar: "التقارير المالية" },
   "nav.admin": { en: "Administration", ar: "الإدارة" },
+  "nav.traineeApps": { en: "Trainee Applications", ar: "طلبات المتدربين" },
   "shell.signOut": { en: "Sign out", ar: "تسجيل الخروج" },
   "shell.staff": { en: "Staff member", ar: "عضو فريق" },
   "shell.noRole": { en: "no role assigned", ar: "بدون صلاحية" },
