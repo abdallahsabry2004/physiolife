@@ -20,6 +20,107 @@ async function getGoogleAuth() {
   return auth;
 }
 
+export const initiateTraineeDriveUpload = createServerFn({ method: "POST" })
+  .validator((data: { applicantName: string; fileName: string; mimeType: string; questionId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+
+    // Get primary storage account
+    const { data: account } = await supabase
+      .from("storage_accounts")
+      .select("id, root_folder_id")
+      .eq("is_active", true)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const auth = await getGoogleAuth();
+    const { token } = await auth.getAccessToken();
+
+    const rootId = account?.root_folder_id;
+    const traineeFormsFolderId = await ensureFolder(
+      auth,
+      "Trainee Applications",
+      rootId ?? undefined,
+    );
+    const applicantFolderId = await ensureFolder(auth, data.applicantName, traineeFormsFolderId);
+
+    const initRes = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink,size",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Upload-Content-Type": data.mimeType,
+        },
+        body: JSON.stringify({
+          name: data.fileName,
+          parents: [applicantFolderId],
+        }),
+      },
+    );
+
+    if (!initRes.ok) throw new Error("Failed to get upload URL from Drive API");
+
+    const uploadUrl = initRes.headers.get("Location");
+    if (!uploadUrl) throw new Error("No resumable upload URL returned");
+
+    return { url: uploadUrl, driveFileId: "", webViewLink: "" }; // ID and link will be available after upload completes
+  });
+
+export const finalizeTraineeDriveUpload = createServerFn({ method: "POST" })
+  .validator((data: { driveFileId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const auth = await getGoogleAuth();
+      const { token } = await auth.getAccessToken();
+      
+      // Make public
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}/permissions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          role: "reader",
+          type: "anyone",
+        }),
+      });
+
+      // Get webViewLink
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${data.driveFileId}?fields=webViewLink,id`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const fileData = await res.json();
+      return { driveFileId: data.driveFileId, webViewLink: fileData.webViewLink };
+    } catch (e) {
+      console.error("Failed to finalize trainee file upload", e);
+      throw e;
+    }
+  });
+
+export const deleteTraineeDriveFile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { driveFileId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const auth = await getGoogleAuth();
+      const { token } = await auth.getAccessToken();
+
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.driveFileId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { success: true };
+    } catch (e) {
+      console.error("Failed to delete trainee file from Drive", e);
+      throw e;
+    }
+  });
+
 // دالة مساعدة لإنشاء فولدر
 async function ensureFolder(auth: OAuth2Client, name: string, parentId?: string) {
   const driveApiUrl = "https://www.googleapis.com/drive/v3/files";
