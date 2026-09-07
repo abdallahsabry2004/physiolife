@@ -22,11 +22,11 @@ async function getGoogleAuth() {
 
 export const initiateTraineeDriveUpload = createServerFn({ method: "POST" })
   .validator((data: { applicantName: string; fileName: string; mimeType: string; questionId: string }) => data)
-  .handler(async ({ data, context }) => {
-    const { supabase } = context;
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Get primary storage account
-    const { data: account } = await supabase
+    const { data: account } = await supabaseAdmin
       .from("storage_accounts")
       .select("id, root_folder_id")
       .eq("is_active", true)
