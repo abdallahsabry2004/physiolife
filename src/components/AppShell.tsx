@@ -39,6 +39,7 @@ const nav = [
     icon: Wallet,
     page: "financial_reports",
   },
+  { to: "/trainee-applications", label: "nav.traineeApps", icon: ClipboardList, adminOnly: true },
   { to: "/admin", label: "nav.admin", icon: ShieldCheck, adminOnly: true },
 ] as const satisfies readonly {
   to: string;
