@@ -23,16 +23,16 @@ async function getGoogleAuth() {
 export const initiateTraineeDriveUpload = createServerFn({ method: "POST" })
   .validator((data: { applicantName: string; fileName: string; mimeType: string; questionId: string }) => data)
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Import the standard client to avoid requiring the Service Role Key
+    const { supabase } = await import("@/integrations/supabase/client");
 
-    // Get primary storage account
-    const { data: account } = await supabaseAdmin
-      .from("storage_accounts")
-      .select("id, root_folder_id")
-      .eq("is_active", true)
-      .order("is_primary", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Use RPC to bypass RLS for anonymous users securely
+    const { data: account, error: rpcError } = await supabase.rpc("get_primary_storage_account");
+    
+    if (rpcError) {
+      console.error("Error fetching storage account via RPC:", rpcError);
+      throw new Error("Could not find an active storage account");
+    }
 
     const auth = await getGoogleAuth();
     const { token } = await auth.getAccessToken();
