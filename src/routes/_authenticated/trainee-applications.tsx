@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -101,16 +102,29 @@ function TraineeApplicationsAdmin() {
   const [qLabel, setQLabel] = useState("");
   const [qType, setQType] = useState("text");
   const [qRequired, setQRequired] = useState(false);
-  const [qOptions, setQOptions] = useState("");
-  const [qFileTypes, setQFileTypes] = useState("");
+  
+  // Options State
+  const [qOptionsList, setQOptionsList] = useState<string[]>([]);
+  const [newOption, setNewOption] = useState("");
+  
+  // File Types State
+  const [qFileTypesList, setQFileTypesList] = useState<string[]>([]);
+
+  const FILE_TYPE_PRESETS = [
+    { label: "PDF Document (.pdf)", value: "application/pdf" },
+    { label: "Image (.jpg, .png)", value: "image/*" },
+    { label: "Word Document (.doc, .docx)", value: "application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    { label: "Video (.mp4, .mov)", value: "video/*" },
+  ];
 
   const openNewQuestion = () => {
     setEditingQuestion(null);
     setQLabel("");
     setQType("text");
     setQRequired(false);
-    setQOptions("");
-    setQFileTypes("");
+    setQOptionsList([]);
+    setNewOption("");
+    setQFileTypesList([]);
     setIsQuestionDialogOpen(true);
   };
 
@@ -119,23 +133,25 @@ function TraineeApplicationsAdmin() {
     setQLabel(q.label);
     setQType(q.field_type);
     setQRequired(q.is_required);
-    setQOptions(q.options ? q.options.join(", ") : "");
-    setQFileTypes(q.allowed_file_types || "");
+    setQOptionsList(q.options || []);
+    setNewOption("");
+    setQFileTypesList(q.allowed_file_types ? q.allowed_file_types.split(",") : []);
     setIsQuestionDialogOpen(true);
   };
 
   const saveQuestionMutation = useMutation({
     mutationFn: async () => {
       if (!qLabel.trim()) throw new Error("Question label is required");
+      if (qType === "select" && qOptionsList.length === 0) throw new Error("Please add at least one option for the dropdown");
       
       const payload = {
         label: qLabel,
         field_type: qType,
         is_required: qRequired,
-        options: (qType === "select" || qType === "radio" || qType === "checkbox") && qOptions.trim() 
-          ? qOptions.split(",").map(s => s.trim()) 
+        options: (qType === "select" || qType === "radio" || qType === "checkbox") && qOptionsList.length > 0 
+          ? qOptionsList 
           : null,
-        allowed_file_types: qType === "file" ? qFileTypes : null,
+        allowed_file_types: qType === "file" && qFileTypesList.length > 0 ? qFileTypesList.join(",") : null,
       };
 
       if (editingQuestion) {
@@ -190,6 +206,20 @@ function TraineeApplicationsAdmin() {
     },
     onError: (e: any) => toast.error(e.message)
   });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: string, note: string }) => {
+      const { error } = await supabase.from("trainee_applications").update({ admin_notes: note }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Note saved");
+      qc.invalidateQueries({ queryKey: ["trainee_applications_admin"] });
+    },
+    onError: (e: any) => toast.error(e.message)
+  });
+
+  const [notesEditing, setNotesEditing] = useState<Record<string, string>>({});
 
   return (
     <PageGuard isAllowed={isAdmin}>
@@ -281,30 +311,56 @@ function TraineeApplicationsAdmin() {
                         })}
                       </div>
                       
-                      {app.files && Array.isArray(app.files) && app.files.length > 0 && (
-                        <div className="space-y-4">
-                          <h5 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Uploaded Files</h5>
-                          <div className="space-y-2">
-                            {app.files.map((f: any, idx: number) => (
-                              <a 
-                                key={idx} 
-                                href={f.drive_web_view_link} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                              >
-                                <ExternalLink className="h-5 w-5 text-primary" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium truncate">{f.name}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {(f.size / 1024 / 1024).toFixed(2)} MB
+                      <div className="space-y-4">
+                        {app.files && Array.isArray(app.files) && app.files.length > 0 && (
+                          <div className="space-y-4 mb-6">
+                            <h5 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Uploaded Files</h5>
+                            <div className="space-y-2">
+                              {app.files.map((f: any, idx: number) => (
+                                <a 
+                                  key={idx} 
+                                  href={f.drive_web_view_link} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                                >
+                                  <ExternalLink className="h-5 w-5 text-primary" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{f.name}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {(f.size / 1024 / 1024).toFixed(2)} MB
+                                    </div>
                                   </div>
-                                </div>
-                              </a>
-                            ))}
+                                </a>
+                              ))}
+                            </div>
                           </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <h5 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Admin Notes</h5>
+                          <Textarea 
+                            placeholder="Add private notes about this applicant..."
+                            value={notesEditing[app.id] !== undefined ? notesEditing[app.id] : (app.admin_notes || "")}
+                            onChange={(e) => setNotesEditing({ ...notesEditing, [app.id]: e.target.value })}
+                            rows={3}
+                          />
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={() => {
+                              const note = notesEditing[app.id] !== undefined ? notesEditing[app.id] : (app.admin_notes || "");
+                              updateNoteMutation.mutate({ id: app.id, note });
+                            }}
+                            disabled={updateNoteMutation.isPending && updateNoteMutation.variables?.id === app.id}
+                          >
+                            {updateNoteMutation.isPending && updateNoteMutation.variables?.id === app.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : null}
+                            Save Note
+                          </Button>
                         </div>
-                      )}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -397,17 +453,80 @@ function TraineeApplicationsAdmin() {
             </div>
 
             {qType === "select" && (
-              <div className="space-y-2">
-                <Label>Options (comma separated)</Label>
-                <Input value={qOptions} onChange={e => setQOptions(e.target.value)} placeholder="e.g. Option A, Option B, Option C" />
+              <div className="space-y-4">
+                <Label>Dropdown Options</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={newOption} 
+                    onChange={e => setNewOption(e.target.value)} 
+                    placeholder="Type an option..." 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newOption.trim()) {
+                          setQOptionsList([...qOptionsList, newOption.trim()]);
+                          setNewOption("");
+                        }
+                      }
+                    }}
+                  />
+                  <Button 
+                    type="button" 
+                    variant="secondary"
+                    onClick={() => {
+                      if (newOption.trim()) {
+                        setQOptionsList([...qOptionsList, newOption.trim()]);
+                        setNewOption("");
+                      }
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {qOptionsList.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {qOptionsList.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-1 bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-sm">
+                        <span>{opt}</span>
+                        <button 
+                          type="button" 
+                          onClick={() => setQOptionsList(qOptionsList.filter((_, idx) => idx !== i))}
+                          className="ml-1 text-muted-foreground hover:text-destructive"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {qType === "file" && (
-              <div className="space-y-2">
-                <Label>Allowed File Types (MIME types, comma separated)</Label>
-                <Input value={qFileTypes} onChange={e => setQFileTypes(e.target.value)} placeholder="e.g. image/*, application/pdf" />
-                <p className="text-xs text-muted-foreground">Leave empty to allow any file type.</p>
+              <div className="space-y-3">
+                <Label>Allowed File Types</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  {FILE_TYPE_PRESETS.map((preset) => {
+                    const isChecked = qFileTypesList.includes(preset.value);
+                    return (
+                      <div key={preset.value} className="flex items-center space-x-2 border p-3 rounded-md hover:bg-muted/50">
+                        <Checkbox 
+                          id={`ft-${preset.value}`} 
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setQFileTypesList([...qFileTypesList, preset.value]);
+                            } else {
+                              setQFileTypesList(qFileTypesList.filter(v => v !== preset.value));
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`ft-${preset.value}`} className="flex-1 cursor-pointer">{preset.label}</Label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">Leave all unchecked to allow any file type.</p>
               </div>
             )}
 
